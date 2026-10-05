@@ -349,6 +349,12 @@ def valid_ticker(ticker: str) -> bool:
     return bool(_TICKER_RE.match(t) or _ASHARE_RE.match(t))
 
 
+def is_a_share(ticker: str) -> bool:
+    """Whether a symbol is an A-share code, which TradingAgents reads through
+    its a_stock vendor rather than Yahoo (so symbols.check leaves it alone)."""
+    return bool(_ASHARE_RE.match((ticker or "").strip().upper()))
+
+
 def analysts_for_ticker(ticker: str) -> tuple[str, ...]:
     """Nine analysts for A shares; the base six (BASE_ANALYSTS) everywhere else."""
     return ASTOCK_ANALYSTS if _ASHARE_RE.match((ticker or "").strip().upper()) else BASE_ANALYSTS
@@ -2240,6 +2246,28 @@ def _fallback_models_used(stderr: str) -> list[str]:
     return seen
 
 
+#: Where a job's log turns from the runner's output into its stderr tail.
+STDERR_MARK = "\n[stderr]\n"
+_STDERR_LINE = re.compile(r"(?m)^\[stderr\][ \t]*$")
+
+
+def public_log(log_text: Any) -> str:
+    """A job's log as the page shows it: the runner's output, without the
+    stderr tail after :data:`STDERR_MARK`.
+
+    That tail is a Python traceback, and the run page printed it under every
+    failed run (asked 2026-10-05: "you don't have to output the error stack
+    trace"). The error line above it already says what went wrong. The tail
+    stays in the stored record, for whoever reads the job on the box. Cutting
+    here rather than where the log is written also cleans every run recorded
+    before this. The marker is matched as a whole line, because a run that
+    printed nothing stores a log that begins with it.
+    """
+    text = str(log_text or "")
+    m = _STDERR_LINE.search(text)
+    return (text[:m.start()] if m else text).strip()
+
+
 def _quota_day() -> Optional[str]:
     try:
         from ystocker import quota
@@ -2558,7 +2586,7 @@ def _run(job_id: str) -> None:
         tail = (visible_out[-6000:] if visible_out.strip() else "")
         clean_err = _denoise(err)
         if clean_err:
-            tail += "\n[stderr]\n" + clean_err[-3000:]
+            tail += STDERR_MARK + clean_err[-3000:]
         job["log"] = tail.strip()
 
         if job.get("status") != "error":

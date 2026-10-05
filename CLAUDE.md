@@ -363,6 +363,9 @@ Each app follows the same pattern:
 - `signups.py` — mails admin@li-family.us when an address signs in for the
   first time, remembered in `ystocker-users`. See "Sign-up mails to the owner"
   below.
+- `symbols.py` — the ticker box on `/agents`: Yahoo's search as suggestions,
+  and the price check that refuses a ticker with no prices before it costs a
+  run. See "The ticker box" below.
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -1766,7 +1769,9 @@ is TCS.NS on Yahoo). `agents.is_no_price_data` matches that error within
 hint in both languages, with the symbol as Yahoo lists it and the exchange
 suffix outside the US. Note that `_TICKER_RE` must start with a letter, so `^NSEI`,
 `0700.HK` and `7203.T` cannot be submitted at all; widening it is a separate
-decision, since TradingAgents' A-share routing keys on six-digit codes.
+decision, since TradingAgents' A-share routing keys on six-digit codes. Since the
+same day such a ticker is mostly refused before it runs (see "The ticker box"
+below), so this refund is the net under that check, not the front door.
 
 **The client sends a table key, never a model id.** TradingAgents does not fail
 fast on an unknown model: `base_client.warn_if_unknown_model()` emits a
@@ -1900,6 +1905,57 @@ Note the free tier premium-gates `EARNINGS_ESTIMATES` and
 `EARNINGS_CALL_TRANSCRIPT`. Those degrade to a stated data gap rather than
 failing the run, so the practical purchase is announcement dates, release timing
 and the drift figures that depend on them.
+
+### The ticker box: suggestions and the no-prices check (`symbols.py`)
+
+Asked for 2026-10-05: "股票代码 should have auto complete and stop analyze if
+the ticker is not found". The first two free runs had died in 7-9 seconds on
+"NIFTY50" and "TCS". Both answers come from Yahoo, because that is where the
+run's prices come from:
+
+- **Suggestions.** Typing in 股票代码 asks `/api/agents/symbols`, which is
+  Yahoo's own search. "TCS" offers TCS.NS (NSE) first, "tata consult" finds it
+  by name, and "600519" finds 600519.SS. Only equities and ETFs whose symbol
+  passes `agents.valid_ticker` are offered, so an index or a digit-first listing
+  is never suggested just to be refused. When Yahoo cannot be asked, the
+  followed companies and SEC's list answer instead; they hold no foreign
+  listing, which is why they are not first. The route is signed in only, so it
+  is no public search proxy.
+- **The check.** `/api/agents/run` asks Yahoo for a month of daily prices
+  before the quota is touched. A 404, or an answer with no rows, refuses the run
+  (`ticker_not_found`, 400) with Yahoo's listings for what was typed. A dotted
+  symbol with none of its own falls back to its base, so "TCS.NY" offers
+  TCS.NS. Anything else (a timeout, a 5xx, a 429, the breaker open) lets the run
+  go ahead, and `agents.is_no_price_data` still refunds one that dies for want
+  of prices. A-share codes are not checked: TradingAgents reads them through its
+  a_stock vendor, and a Yahoo 404 says nothing about that.
+- **The calls.** Measured from the box on 2026-10-05, both endpoints answer in
+  0.03-0.08 s and need no cookie or crumb. They go through curl_cffi as Chrome,
+  not yfinance, whose fixed 30-second timeout would hold a submit that long.
+  Each gets 4 seconds and no retry under its own breaker (`yahoo-lookup`), so a
+  slow lookup cannot cool down the data warmers. Answers are cached per process:
+  a search for 6 h, "found" for a day, "missing" for 30 minutes.
+- **What Yahoo's search does not do.** It gave no answer for 贵州茅台, so a
+  non-ASCII query is answered with nothing rather than sent. With
+  `enableFuzzyQuery=false`, "NIFTY" returned nothing at all, so the flag is not
+  sent.
+
+On the page, ↑/↓, Enter and Esc work the list, and it lifts the form card while
+open (the `[data-sel-raise]` rule). A company name typed and never picked gets
+the list again, not a request the server could only refuse. A refusal is drawn
+in `#agError` with the listings as buttons that fill the box. `maxlength` went
+from 10 to 40, to fit a company name.
+
+**The run page no longer prints a traceback** (asked the same day: "you don't
+have to output the error stack trace"). `_run` still stores the stderr tail in
+the job's `log`, after `agents.STDERR_MARK`. The job API serves
+`agents.public_log(log)`, which cuts it there, so runs recorded before the
+change are clean too. The error line above it says what went wrong.
+
+Tests: `tests/test_symbols.py` (18, on Yahoo's answers as served to the box, in
+`tests/fixtures/symbols/yahoo.json`) and `tests/check_agents_ticker.py` (8,
+hermetic: the refusal before the quota, the fallbacks, the job API's log, the
+gate, the page's combobox).
 
 ### The progress bar on a running report (`/agents`)
 
@@ -3421,4 +3477,12 @@ Started in `create_app()`, all daemon threads:
   and config files pointed at /dev/null), stub SSM, and no-op `Thread.start`
   around `create_app()`, as `check_research_endpoints.py` does.
   `check_inbox_endpoints.py` and `check_assets_endpoints.py` did none of that
-  until 2026-10-04.
+  until 2026-10-04. Clear `AGENTS_ALLOWED_EMAILS` too: this shell sets it, and a
+  page rendered with it shows "not allowed" instead of the run form.
+- **`tests/test_report_email.py` puts a stub at `sys.modules["ystocker.agents"]`**
+  when `unittest discover` imports it, so code those tests reach after it sees
+  the stub through `from ystocker.agents import x` and fails with "cannot import
+  name … (unknown location)". Module code that the default suite exercises
+  imports the module through the package instead (`from ystocker import agents`,
+  then `agents.x`), which keeps the real one, as `signups.py` and `symbols.py`
+  do. A test file run on its own passes either way, which is how this hides.

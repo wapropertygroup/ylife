@@ -1,0 +1,489 @@
+{
+ "_note": "Yahoo's answers as served to the box on 2026-10-05 (curl_cffi as Chrome, no cookie). search_*: /v1/finance/search?quotesCount=10&newsCount=0&listsCount=0; chart_*: /v8/finance/chart/<symbol>?range=1mo&interval=1d.",
+ "search_TCS": {
+  "status": 200,
+  "body": {
+   "explains": [],
+   "count": 7,
+   "quotes": [
+    {
+     "exchange": "NSI",
+     "shortname": "TATA CONSULTANCY SERV LT",
+     "quoteType": "EQUITY",
+     "symbol": "TCS.NS",
+     "index": "quotes",
+     "score": 21070.0,
+     "typeDisp": "Equity",
+     "longname": "Tata Consultancy Services Limited",
+     "exchDisp": "NSE",
+     "sector": "Technology",
+     "industry": "Information Technology Services",
+     "dispSecIndFlag": true,
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "TOR",
+     "shortname": "TECSYS INC J",
+     "quoteType": "EQUITY",
+     "symbol": "TCS.TO",
+     "index": "quotes",
+     "score": 20060.0,
+     "typeDisp": "Equity",
+     "longname": "Tecsys Inc.",
+     "exchDisp": "Toronto",
+     "sector": "Technology",
+     "industry": "Software—Application",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "BSE",
+     "shortname": "TATA CONSULTANCY SERVICES LTD.",
+     "quoteType": "EQUITY",
+     "symbol": "TCS.BO",
+     "index": "quotes",
+     "score": 20046.0,
+     "typeDisp": "Equity",
+     "longname": "Tata Consultancy Services Limited",
+     "exchDisp": "Bombay",
+     "sector": "Technology",
+     "industry": "Information Technology Services",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "GER",
+     "shortname": "Axon Enterprise Inc.          R",
+     "quoteType": "EQUITY",
+     "symbol": "TCS.DE",
+     "index": "quotes",
+     "score": 20045.0,
+     "typeDisp": "Equity",
+     "longname": "Axon Enterprise, Inc.",
+     "exchDisp": "XETRA",
+     "sector": "Industrials",
+     "industry": "Aerospace & Defense",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "TOR",
+     "shortname": "TD CASH MANAGEMENT ETF",
+     "quoteType": "ETF",
+     "symbol": "TCSH.TO",
+     "index": "quotes",
+     "score": 20028.0,
+     "typeDisp": "ETF",
+     "longname": "TD Cash Management ETF",
+     "exchDisp": "Toronto",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NAS",
+     "shortname": "Transamerica Multi-Asset Income",
+     "quoteType": "MUTUALFUND",
+     "symbol": "TCSHX",
+     "index": "quotes",
+     "score": 20015.0,
+     "typeDisp": "Fund",
+     "longname": "Transamerica Multi-Asset Income C",
+     "exchDisp": "NASDAQ",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NAS",
+     "shortname": "TIAA-CREF Quant Small-Cap Equit",
+     "quoteType": "MUTUALFUND",
+     "symbol": "TCSEX",
+     "index": "quotes",
+     "score": 20014.0,
+     "typeDisp": "Fund",
+     "longname": "Nuveen Quant Small Cap Equity A",
+     "exchDisp": "NASDAQ",
+     "isYahooFinance": true
+    }
+   ],
+   "news": [],
+   "nav": [],
+   "lists": [],
+   "researchReports": [],
+   "screenerFieldResults": [],
+   "totalTime": 37,
+   "timeTakenForQuotes": 431,
+   "timeTakenForNews": 0,
+   "timeTakenForAlgowatchlist": 400,
+   "timeTakenForPredefinedScreener": 400,
+   "timeTakenForCrunchbase": 0,
+   "timeTakenForNav": 400,
+   "timeTakenForResearchReports": 0,
+   "timeTakenForQuestions": 0,
+   "timeTakenForScreenerField": 0,
+   "timeTakenForCulturalAssets": 0,
+   "timeTakenForSearchLists": 0
+  }
+ },
+ "search_NIFTY50": {
+  "status": 200,
+  "body": {
+   "explains": [],
+   "count": 7,
+   "quotes": [
+    {
+     "exchange": "NSI",
+     "shortname": "NIFTY500 MULTICAP",
+     "quoteType": "INDEX",
+     "symbol": "NIFTY500_MULTICAP.NS",
+     "index": "quotes",
+     "score": 20040.0,
+     "typeDisp": "Index",
+     "longname": "NIFTY500 MULTICAP",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NSI",
+     "shortname": "EDELAMC - EMULTIMQ",
+     "quoteType": "EQUITY",
+     "symbol": "EMULTIMQ.NS",
+     "index": "quotes",
+     "score": 20006.0,
+     "typeDisp": "Equity",
+     "longname": "Edelweiss Nifty500 Multicap Momentum Quality 50 ETF",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NSI",
+     "shortname": "NIFTY50 TR 1X INV",
+     "quoteType": "INDEX",
+     "symbol": "NIFTYTR1XINV.NS",
+     "index": "quotes",
+     "score": 20004.0,
+     "typeDisp": "Index",
+     "longname": "NIFTY50 TR 1X INV",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NSI",
+     "shortname": "NIFTY50 VALUE 20",
+     "quoteType": "INDEX",
+     "symbol": "NV20.NS",
+     "index": "quotes",
+     "score": 20004.0,
+     "typeDisp": "Index",
+     "longname": "Kotak Nifty 50 Value 20 ETF",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "KSC",
+     "shortname": "KODEX India Nifty50 Leverage(SY",
+     "quoteType": "ETF",
+     "symbol": "453820.KS",
+     "index": "quotes",
+     "score": 20003.0,
+     "typeDisp": "ETF",
+     "longname": "Samsung Kodex India Nifty50 Leverage Etf (Synth)",
+     "exchDisp": "Korea",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NSI",
+     "shortname": "NIFTY50 DIV POINT",
+     "quoteType": "INDEX",
+     "symbol": "^NSEDIV",
+     "index": "quotes",
+     "score": 20003.0,
+     "typeDisp": "Index",
+     "longname": "NIFTY50 DIV POINT",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    },
+    {
+     "exchange": "NSI",
+     "shortname": "NIFTY500 FLEXICAP",
+     "quoteType": "INDEX",
+     "symbol": "NIFTY500_FLEXICAP.NS",
+     "index": "quotes",
+     "score": 20003.0,
+     "typeDisp": "Index",
+     "longname": "NIFTY500 FLEXICAP",
+     "exchDisp": "NSE",
+     "isYahooFinance": true
+    }
+   ],
+   "news": [],
+   "nav": [],
+   "lists": [],
+   "researchReports": [],
+   "screenerFieldResults": [],
+   "totalTime": 38,
+   "timeTakenForQuotes": 433,
+   "timeTakenForNews": 0,
+   "timeTakenForAlgowatchlist": 400,
+   "timeTakenForPredefinedScreener": 400,
+   "timeTakenForCrunchbase": 0,
+   "timeTakenForNav": 400,
+   "timeTakenForResearchReports": 0,
+   "timeTakenForQuestions": 0,
+   "timeTakenForScreenerField": 0,
+   "timeTakenForCulturalAssets": 0,
+   "timeTakenForSearchLists": 0
+  }
+ },
+ "chart_TCS": {
+  "status": 404,
+  "body": {
+   "chart": {
+    "result": null,
+    "error": {
+     "code": "Not Found",
+     "description": "No data found, symbol may be delisted"
+    }
+   }
+  }
+ },
+ "chart_TCS.NS": {
+  "status": 200,
+  "body": {
+   "chart": {
+    "result": [
+     {
+      "meta": {
+       "currency": "INR",
+       "symbol": "TCS.NS",
+       "exchangeName": "NSI",
+       "fullExchangeName": "NSE",
+       "instrumentType": "EQUITY",
+       "firstTradeDate": 1029123900,
+       "regularMarketTime": 1791193500,
+       "hasPrePostMarketData": false,
+       "gmtoffset": 19800,
+       "timezone": "IST",
+       "exchangeTimezoneName": "Asia/Kolkata",
+       "regularMarketPrice": 2114.4,
+       "regularMarketChangePercent": 1.899,
+       "fulldayPrice": 2114.4,
+       "fulldayChange": 39.4,
+       "fulldayChangePercent": 1.899,
+       "fiftyTwoWeekHigh": 3350.0,
+       "fiftyTwoWeekLow": 1976.8,
+       "regularMarketDayHigh": 2140.9,
+       "regularMarketDayLow": 2063.6,
+       "regularMarketVolume": 5269742,
+       "longName": "Tata Consultancy Services Limited",
+       "shortName": "TATA CONSULTANCY SERV LT",
+       "chartPreviousClose": 2304.0,
+       "priceHint": 2,
+       "currentTradingPeriod": {
+        "pre": {
+         "timezone": "IST",
+         "end": 1791258300,
+         "start": 1791258300,
+         "gmtoffset": 19800
+        },
+        "regular": {
+         "timezone": "IST",
+         "end": 1791280800,
+         "start": 1791258300,
+         "gmtoffset": 19800
+        },
+        "post": {
+         "timezone": "IST",
+         "end": 1791280800,
+         "start": 1791280800,
+         "gmtoffset": 19800
+        }
+       },
+       "dataGranularity": "1d",
+       "range": "1mo",
+       "validRanges": [
+        "1d",
+        "5d",
+        "1mo",
+        "3mo",
+        "6mo",
+        "1y",
+        "2y",
+        "5y",
+        "10y",
+        "ytd",
+        "max"
+       ]
+      },
+      "timestamp": [
+       1788752700,
+       1788839100,
+       1788925500,
+       1789011900,
+       1789098300,
+       1789357500,
+       1789443900,
+       1789530300,
+       1789616700,
+       1789703100,
+       1789962300,
+       1790048700,
+       1790135100,
+       1790221500,
+       1790307900,
+       1790567100,
+       1790653500,
+       1790739900,
+       1790826300,
+       1790912700,
+       1791171900
+      ],
+      "indicators": {
+       "quote": [
+        {
+         "high": [
+          2299.89990234375,
+          2274.5,
+          2237.0,
+          2232.0,
+          2232.60009765625,
+          2200.800048828125,
+          2323.0,
+          2273.89990234375,
+          2263.60009765625,
+          2177.300048828125,
+          2145.0,
+          2135.199951171875,
+          2104.199951171875,
+          2096.89990234375,
+          2090.199951171875,
+          2100.0,
+          2085.10009765625,
+          2101.0,
+          2093.89990234375,
+          null,
+          2140.89990234375
+         ],
+         "low": [
+          2260.10009765625,
+          2244.0,
+          2193.199951171875,
+          2190.60009765625,
+          2185.5,
+          2200.800048828125,
+          2251.0,
+          2172.0,
+          2162.5,
+          2101.199951171875,
+          2075.300048828125,
+          2098.199951171875,
+          2077.60009765625,
+          2067.10009765625,
+          2038.0999755859375,
+          2051.0,
+          2032.4000244140625,
+          2050.60009765625,
+          2045.0999755859375,
+          null,
+          2063.60009765625
+         ],
+         "open": [
+          2290.10009765625,
+          2270.0,
+          2237.0,
+          2199.0,
+          2185.5,
+          2200.800048828125,
+          2275.5,
+          2270.0,
+          2171.0,
+          2177.199951171875,
+          2090.0,
+          2135.10009765625,
+          2099.0,
+          2076.0,
+          2054.0,
+          2100.0,
+          2065.0,
+          2069.0,
+          2052.60009765625,
+          null,
+          2114.0
+         ],
+         "volume": [
+          2297551,
+          2148114,
+          3370071,
+          2490912,
+          2634124,
+          0,
+          5406210,
+          2763709,
+          3295917,
+          6875428,
+          2330811,
+          3641623,
+          2228402,
+          1760662,
+          3342195,
+          2457049,
+          4437783,
+          3656425,
+          3428501,
+          null,
+          5269742
+         ],
+         "close": [
+          2270.0,
+          2255.5,
+          2208.0,
+          2204.10009765625,
+          2200.800048828125,
+          2200.800048828125,
+          2251.0,
+          2188.800048828125,
+          2190.0,
+          2105.0,
+          2128.699951171875,
+          2105.0,
+          2089.60009765625,
+          2087.0,
+          2082.0,
+          2070.699951171875,
+          2032.4000244140625,
+          2050.60009765625,
+          2075.0,
+          null,
+          null
+         ]
+        }
+       ],
+       "adjclose": [
+        {
+         "adjclose": [
+          2270.0,
+          2255.5,
+          2208.0,
+          2204.10009765625,
+          2200.800048828125,
+          2200.800048828125,
+          2251.0,
+          2188.800048828125,
+          2190.0,
+          2105.0,
+          2128.699951171875,
+          2105.0,
+          2089.60009765625,
+          2087.0,
+          2082.0,
+          2070.699951171875,
+          2032.4000244140625,
+          2050.60009765625,
+          2075.0,
+          null,
+          null
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "error": null
+   }
+  }
+ }
+}

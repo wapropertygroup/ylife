@@ -4230,6 +4230,39 @@ def api_search():
     return jsonify(results[:10])
 
 
+def _followed_rows() -> list[tuple[str, str, str]]:
+    """The followed companies as ``(ticker, cached name, "")``: the part of
+    ``symbols``' local fallback only the ticker cache knows."""
+    rows: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    with _cache_lock:
+        cache = _cache or {}
+        for group, tickers in PEER_GROUPS.items():
+            for t in tickers:
+                if t not in seen:
+                    seen.add(t)
+                    rows.append((t, ((cache.get(group) or {}).get(t) or {}).get("Name") or "", ""))
+    return rows
+
+
+@bp.route("/api/agents/symbols")
+def api_agents_symbols():
+    """Suggestions for the run form's ticker box (ystocker.symbols).
+
+    Signed in, like every agents route: it forwards what is typed to Yahoo's
+    search, and is not offered as a search proxy to anyone else.
+    """
+    gate = _agent_gate()
+    if gate:
+        return gate
+    from ystocker import symbols
+
+    found, source = symbols.search(request.args.get("q", ""), followed=_followed_rows)
+    resp = jsonify({"results": found, "source": source})
+    resp.headers["Cache-Control"] = "private, max-age=300"
+    return resp
+
+
 @bp.route("/api/search/semantic", methods=["POST"])
 def api_search_semantic():
     """Gemini-powered semantic stock search — finds tickers matching a natural-language query."""
@@ -5470,6 +5503,27 @@ def api_agents_run():
     body = request.get_json(force=True, silent=True) or {}
     email = _agent_user() or ""
 
+    # A ticker with no prices is refused here, before the quota is touched, with
+    # Yahoo's own suggestions for what was meant (asked 2026-10-05: "stop analyze
+    # if the ticker is not found"). Only a definite "missing" stops the run: a
+    # check that cannot be made lets it go ahead, and agents.is_no_price_data
+    # still refunds a run that dies for want of prices.
+    from ystocker import symbols
+    from ystocker.agents import valid_ticker
+
+    asked = str(body.get("ticker", "") or "").strip().upper()
+    if valid_ticker(asked) and symbols.check(asked) == symbols.MISSING:
+        suggestions, _ = symbols.search(asked, followed=_followed_rows)
+        base = asked.split(".")[0].split("-")[0]
+        if not suggestions and base != asked:
+            suggestions, _ = symbols.search(base, followed=_followed_rows)
+        log.info("agents: refused %s for %s (no prices); %d suggestions",
+                 asked, email, len(suggestions))
+        return jsonify({"error": f"No market data found for {asked}. Nothing was charged.",
+                        "reason": "ticker_not_found", "ticker": asked,
+                        "suggestions": [s for s in suggestions if s["ticker"] != asked][:5],
+                        "quota": quota.usage(email)}), 400
+
     # Validate before charging quota, so a typo'd ticker does not cost a run.
     ok, reason, info = quota.try_consume(email)
     if not ok:
@@ -5555,10 +5609,13 @@ def api_agents_job(job_id):
     # instead of a JavaScript copy that can drift on the awkward cases -- the
     # section bodies contain their own markdown headings.
     from ystocker.agent_roles import split_sections
+    from ystocker.agents import public_log
 
     payload = dict(job)
     report = payload.pop("report", None) or ""
     payload["sections"] = split_sections(report) if report.strip() else []
+    # The runner's output without the traceback the record also keeps.
+    payload["log"] = public_log(job.get("log"))
 
     # Live progress. A deep run takes ten minutes or more, and the finished
     # report only exists at the very end, so the page would otherwise show a

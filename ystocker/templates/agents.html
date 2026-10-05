@@ -777,6 +777,34 @@
    <select> popup is an OS window and escapes its frame; this one cannot, and
    /agents?embed=1 renders the panel inside a short iframe. */
 .ag-sel-menu.is-up { top: auto; bottom: calc(100% + 5px); }
+/* The ticker box's suggestions, laid out like .ag-sel-menu and lifted out of the
+   form card the same way while open. Hand-written: the rows are built in JS. */
+.ag-sym-wrap { position: relative; }
+.ag-sym-list {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 30;
+  min-width: 100%; width: max-content; max-width: min(380px, 88vw);
+  margin: 0; padding: 4px; list-style: none;
+  background: var(--ag-float); border: 1px solid var(--ag-line); border-radius: 10px;
+  box-shadow: 0 16px 34px -14px var(--ag-shadow-hard), 0 0 0 1px rgba(99,102,241,.08);
+}
+.ag-sym-list[hidden] { display: none; }
+.ag-sym-opt {
+  display: flex; align-items: baseline; gap: 8px; white-space: nowrap;
+  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  color: var(--ag-ink-muted); font-size: 12px;
+}
+.ag-sym-opt:hover, .ag-sym-opt.is-active { background: rgba(99,102,241,.14); color: var(--ag-ink); }
+.ag-sym-tk { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+             font-weight: 600; color: var(--ag-ink); }
+.ag-sym-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.ag-sym-ex { margin-left: auto; padding-left: 8px; font-size: 11px; opacity: .75; }
+/* The listings offered when a ticker was refused, inside #agError. */
+.ag-sym-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ag-sym-chip {
+  padding: 3px 10px; border: 1px solid currentColor; border-radius: 999px;
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.ag-sym-chip:hover { background: rgba(148,163,184,.16); }
 .ag-sel-opt {
   display: flex; align-items: center; gap: 8px; white-space: nowrap;
   padding: 7px 10px; border-radius: 7px; cursor: pointer;
@@ -1469,7 +1497,14 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   <div class="ag-form-grid">
     <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agTicker" data-i18n="agents.ticker">Ticker</label>
-      <input id="agTicker" class="ag-input" value="NVDA" maxlength="10" autocomplete="off">
+      {# Suggestions from /api/agents/symbols (Yahoo's search). maxlength fits a
+         company name, which the list turns into a symbol. #}
+      <div class="ag-sym-wrap">
+        <input id="agTicker" class="ag-input" value="NVDA" maxlength="40" autocomplete="off"
+               spellcheck="false" role="combobox" aria-autocomplete="list"
+               aria-expanded="false" aria-controls="agTickerList">
+        <ul id="agTickerList" class="ag-sym-list" role="listbox" hidden></ul>
+      </div>
     </div>
     <div class="ag-form-field">
       <label class="block text-xs text-slate-500 mb-1" for="agDate" data-i18n="agents.date">Analysis date</label>
@@ -2294,6 +2329,123 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   const showErr = m => { errEl.textContent = '⚠ ' + m; errEl.classList.remove('hidden'); };
   const clearErr = () => errEl.classList.add('hidden');
 
+  // ── Ticker suggestions ─────────────────────────────────────────────────────
+  // What is typed in 股票代码 goes to /api/agents/symbols, which is Yahoo's own
+  // search (symbols.py): "TCS" offers TCS.NS first, and a company name finds
+  // its symbol. Debounced, and only the newest answer is drawn. The list lifts
+  // the form card while open, for the reason the [data-sel-raise] rule gives.
+  const symList = document.getElementById('agTickerList');
+  const symRaise = tickerEl ? tickerEl.closest('[data-sel-raise]') : null;
+  // agents._TICKER_RE and _ASHARE_RE, so a name is caught here, not refused there.
+  const TICKER_SHAPE = /^[A-Z][A-Z0-9.\-]{0,9}$|^(?:(?:SH|SZ|BJ)\.?)?\d{6}(?:\.(?:SS|SZ|SH|BJ))?$/;
+  let symItems = [], symActive = -1, symTimer = null, symSeq = 0;
+
+  function symClose() {
+    if (!symList) return;
+    symList.hidden = true;
+    symList.textContent = '';
+    symItems = []; symActive = -1;
+    tickerEl.setAttribute('aria-expanded', 'false');
+    tickerEl.removeAttribute('aria-activedescendant');
+    if (symRaise) symRaise.classList.remove('ag-raised');
+  }
+  function symMark(i) {
+    symActive = i;
+    [...symList.children].forEach((li, j) => {
+      li.classList.toggle('is-active', j === i);
+      li.setAttribute('aria-selected', j === i ? 'true' : 'false');
+    });
+    if (i >= 0) tickerEl.setAttribute('aria-activedescendant', 'agTickerOpt' + i);
+    else tickerEl.removeAttribute('aria-activedescendant');
+  }
+  function symPick(i) {
+    const it = symItems[i];
+    if (!it) return;
+    tickerEl.value = it.ticker;
+    symClose();
+    clearErr();
+  }
+  function symDraw(items) {
+    if (!items.length || document.activeElement !== tickerEl) { symClose(); return; }
+    symItems = items;
+    symList.textContent = '';
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.id = 'agTickerOpt' + i;
+      li.className = 'ag-sym-opt';
+      li.setAttribute('role', 'option');
+      for (const [cls, text] of [['ag-sym-tk', it.ticker], ['ag-sym-name', it.name],
+                                 ['ag-sym-ex', it.exchange]]) {
+        const span = document.createElement('span');
+        span.className = cls;
+        span.textContent = text || '';
+        li.appendChild(span);
+      }
+      // mousedown, not click: a click lands after the input's blur closed the list.
+      li.addEventListener('mousedown', e => { e.preventDefault(); symPick(i); });
+      symList.appendChild(li);
+    });
+    symList.hidden = false;
+    tickerEl.setAttribute('aria-expanded', 'true');
+    if (symRaise) symRaise.classList.add('ag-raised');
+    symMark(-1);
+  }
+  async function symFetch(q) {
+    const seq = ++symSeq;
+    try {
+      const r = await fetch('/api/agents/symbols?q=' + encodeURIComponent(q));
+      if (!r.ok || seq !== symSeq) return;
+      const d = await r.json();
+      if (seq === symSeq) symDraw(d.results || []);
+    } catch (_) { /* a convenience: typing a symbol still works without it */ }
+  }
+  if (tickerEl && symList) {
+    tickerEl.addEventListener('input', () => {
+      clearTimeout(symTimer);
+      const q = tickerEl.value.trim();
+      if (!q) { symSeq++; symClose(); return; }
+      symTimer = setTimeout(() => symFetch(q), 180);
+    });
+    tickerEl.addEventListener('keydown', e => {
+      if (symList.hidden || !symItems.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); symMark((symActive + 1) % symItems.length); }
+      else if (e.key === 'ArrowUp') {
+        e.preventDefault(); symMark(symActive <= 0 ? symItems.length - 1 : symActive - 1);
+      } else if (e.key === 'Enter' && symActive >= 0) { e.preventDefault(); symPick(symActive); }
+      else if (e.key === 'Escape') { e.preventDefault(); symClose(); }
+    });
+    tickerEl.addEventListener('blur', () => { symSeq++; clearTimeout(symTimer); symClose(); });
+  }
+
+  // A ticker the server refused for want of prices: say so, say nothing was
+  // charged, and offer Yahoo's listings for it as buttons that fill the box.
+  function showTickerMissing(d) {
+    const t = d.ticker || tickerEl.value.trim().toUpperCase();
+    const sugg = Array.isArray(d.suggestions) ? d.suggestions : [];
+    const key = sugg.length ? 'agents.ticker_missing_pick' : 'agents.ticker_missing';
+    const fallback = sugg.length
+      ? 'No market data found for {t}, so nothing ran and nothing was charged. Did you mean one of these?'
+      : 'No market data found for {t}, so nothing ran and nothing was charged.';
+    errEl.textContent = '';
+    const line = document.createElement('div');
+    line.textContent = '⚠ ' + (I18n.t(key) || fallback).replace('{t}', t);
+    errEl.appendChild(line);
+    if (sugg.length) {
+      const row = document.createElement('div');
+      row.className = 'ag-sym-chips';
+      for (const s of sugg) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ag-sym-chip';
+        b.textContent = [s.ticker, s.name, s.exchange].filter(Boolean).join(' · ');
+        b.addEventListener('click', () => { tickerEl.value = s.ticker; clearErr(); tickerEl.focus(); });
+        row.appendChild(b);
+      }
+      errEl.appendChild(row);
+    }
+    errEl.classList.remove('hidden');
+  }
+
   const setStatus = s => {
     statusEl.textContent = s;
     statusEl.className = 'ag-pill ' + ({ queued: 'ag-queued', running: 'ag-running',
@@ -3063,6 +3215,16 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
   async function start() {
     clearErr();
+    // A company name typed and never picked: offer the list rather than send
+    // the server a value it can only refuse.
+    const typed = (tickerEl.value || '').trim().toUpperCase();
+    if (!TICKER_SHAPE.test(typed)) {
+      showErr(I18n.t('agents.pick_symbol') || 'Pick a symbol from the list under the ticker box.');
+      tickerEl.focus();
+      if (typed) symFetch(tickerEl.value.trim());
+      return;
+    }
+    symClose();
     runBtn.disabled = true;
     try {
       const r = await fetch('/api/agents/run', {
@@ -3081,6 +3243,14 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
                                thinking: document.getElementById('agThink')?.value || '' }),
       });
       const d = await r.json().catch(() => ({}));
+      if (!r.ok && d.reason === 'ticker_not_found') {
+        // Refused before anything ran or was charged; the quota is repainted
+        // only to show it unchanged.
+        showTickerMissing(d);
+        if (d.quota) paintQuota(d.quota);
+        runBtn.disabled = false;
+        return;
+      }
       if (!r.ok) {
         // A paid model on a free run: worded here, in the page's language,
         // since the server's sentence is English. paintQuota then relocks the
