@@ -1964,8 +1964,8 @@ _PORTFOLIO_BLIND_ROLES = frozenset({
 
 # The preamble is the package's title and generation stamp. Only those lines
 # survive, so a report builder that one day puts more before the first turn
-# does not publish it by default.
-_PREAMBLE_KEEP = re.compile(r"^(#\s+\S|Generated:)")
+# does not publish it by default. A Chinese report stamps itself 生成时间：.
+_PREAMBLE_KEEP = re.compile(r"^(#\s+\S|Generated:|生成时间[:：])")
 
 # In the report's language, like the report itself -- the page and the PDF both
 # print it where the dropped turns would have begun.

@@ -1957,6 +1957,36 @@ Tests: `tests/test_symbols.py` (18, on Yahoo's answers as served to the box, in
 hermetic: the refusal before the quota, the fallbacks, the job API's log, the
 gate, the page's combobox).
 
+### A Chinese report is Chinese throughout (TradingAgents' `report_language.py`)
+
+Reported 2026-10-05 on an INTC run in Chinese: the Earnings, Quality and
+Valuation sections each opened with an English report, and the model quoted the
+English verdict into its Chinese prose ("动量评级为Insufficient Data"). The
+language setting only ever reached the model. Every part a renderer writes in
+code was English: the evidence tables, the bands and tiers, the data gaps, the
+Research Manager, Trader and Portfolio Manager headers, the sentiment band, the
+risk gate's compliance notice and the report's title.
+
+The fix is in the fork, `tradingagents/report_language.py`. Each renderer takes
+`language` and defaults to the run's `output_language`, so English is unchanged
+byte for byte. Three things to know before touching it:
+
+- **The rating still reads back in English.** A Chinese decision renders
+  `**评级**：减持`, and the fork's `rating.py` reads a Chinese label (only at the
+  start of a line) as the English step. `job["decision"]`, the calendar, the
+  chips and the PDF tone all see `Underweight` as before.
+- **An adapter sentence with no Chinese form stays English** rather than being
+  guessed at. `tests/test_report_language.py` in the fork scans the adapters
+  and fails on a new data-gap sentence with no entry.
+- **The team and role headings stay English** (`### Portfolio Manager`), since
+  `split_sections` keys on them. The title and stamp are `# 交易分析报告：NVDA` /
+  `生成时间：`, which `agents._PREAMBLE_KEEP` and `report_pdf._PREAMBLE_DROP`
+  recognise.
+
+Tests: the fork's `tests/test_report_language.py` (78, no network or LLM), and
+here `tests/test_report_pdf_preamble.py` (3) and the Chinese case in
+`tests/test_agents_portfolio_context.py`.
+
 ### The progress bar on a running report (`/agents`)
 
 While a run is queued or running, the current-run card shows how far it has

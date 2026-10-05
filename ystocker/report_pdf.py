@@ -453,7 +453,8 @@ def _inline(text: str, mono: str = "Courier", tone: Optional[str] = None,
 
 
 _PREAMBLE_DROP = re.compile(
-    r"^\s*(?:#{1,3}\s*)?(?:trading\s+analysis\s+report\b.*|generated\s*[:：].*)$",
+    r"^\s*(?:#{1,3}\s*)?(?:trading\s+analysis\s+report\b.*|generated\s*[:：].*"
+    r"|交易分析报告.*|生成时间\s*[:：].*)$",
     re.IGNORECASE)
 
 

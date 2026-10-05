@@ -403,6 +403,14 @@ class TestShowcaseCopy(unittest.TestCase):
         self.assertIn("Generated: 2026-09-21 19:16:50", copy)
         self.assertNotIn("6.2%", copy)
 
+    def test_a_chinese_preamble_keeps_its_title_and_stamp_too(self):
+        # TradingAgents writes the preamble in the report's language.
+        report = _report().replace("# Trading Analysis Report: NVDA", "# 交易分析报告：NVDA") \
+                          .replace("Generated: ", "生成时间：")
+        copy = agents.portfolio_blind_report(report, "zh")
+        self.assertIn("# 交易分析报告：NVDA", copy)
+        self.assertIn("生成时间：2026-09-21 19:16:50", copy)
+
     def test_a_report_it_cannot_parse_publishes_none_of_its_body(self):
         # Fails closed: no role headings means no turns it can vouch for.
         copy = agents.portfolio_blind_report("Hold 12% of NVDA, cap is 10%.", "en")
