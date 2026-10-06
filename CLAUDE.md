@@ -1259,6 +1259,12 @@ mail, readable by every account on trade-agents.com.
   (`/api/posts/token`: GET what exists, POST a new one, DELETE). That token
   posts into its holder's feed and nobody else's, so a leaked one fills one
   inbox, not every inbox.
+- **`/posts/token` is the link to hand somebody**: the same page, opened at
+  "How to post" step 1 (get a token), then step 2 (post with it). Signed out,
+  its card signs in with `next=/posts/token`, so it lands there after Google.
+  The how-to and the curl example's first line both carry it, because the
+  example asks for `<YOUR_TOKEN>` and must say where one comes from. Minting
+  stays session-only: a script cannot make a token for itself.
 - **A personal token is shown once.** Only its SHA-256 is stored, in the same
   table under `bucket = "_token"`, with `_owner` naming each address's current
   one. Making a new token revokes the old. The writes run old-out, new-in,
@@ -1327,9 +1333,9 @@ whatever produced them, so keeping them for ever buys nothing.
 Tests: `tests/test_inbox.py` (57, no app/network/AWS — the fail-closed token,
 the caps, the refusals, and owners and personal tokens against an in-memory
 table that evaluates the real key conditions) and
-`tests/check_inbox_endpoints.py` (30 end-to-end, `check_` so `unittest discover`
+`tests/check_inbox_endpoints.py` (33 end-to-end, `check_` so `unittest discover`
 skips it: whose feed a post lands in, the token's whole life, the per-address
-ceiling).
+ceiling, `/posts/token` across sign-in).
 
 ```bash
 aws dynamodb create-table --table-name ystocker-inbox --region us-west-2 \

@@ -15151,12 +15151,30 @@ def posts_page():
     """The feed. Renders for everyone; the body branches on sign-in, matching
     ``assets_page`` — a login form with no context is a worse landing than a
     page that says what it is."""
+    return _render_posts()
+
+
+@bp.route("/posts/token")
+def posts_token_page():
+    """/posts opened at the posting-token step: the address to hand anyone who
+    needs a token. Signed out, the sign-in card comes back here, so the link
+    works before and after login. Its own view rather than a second route on
+    ``posts_page``, which would make ``url_for`` pick one of the two names for
+    every nav link (the trap ``inbox_page`` records)."""
+    return _render_posts(focus="token")
+
+
+def _render_posts(focus: str = ""):
     email = session.get("user_email")
-    log.info("GET /inbox")
+    log.info("GET /posts%s", f" ({focus})" if focus else "")
+    here = url_for("main.posts_token_page") if focus else url_for("main.posts_page")
     return render_template("posts.html",
                            peer_groups=list(PEER_GROUPS.keys()),
                            signed_in=bool(email),
-                           user_email=email or "")
+                           user_email=email or "",
+                           focus=focus,
+                           login_next=here,
+                           token_url=_share_base() + url_for("main.posts_token_page"))
 
 
 @bp.route("/inbox")

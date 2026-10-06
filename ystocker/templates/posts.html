@@ -177,6 +177,9 @@
     color: #b45309; white-space: nowrap;
   }
   .dark .md-href-refused { color: #fcd34d; }
+  /* Step 1 reached from /posts/token: a brief ring, so the eye lands on it. */
+  #ibToken { border-radius: 0.5rem; transition: box-shadow .4s; }
+  #ibToken.ib-focus { box-shadow: 0 0 0 2px var(--t-accent), 0 0 0 6px rgba(99,102,241,.15); }
   .ib-more {
     font-size: 11px; color: var(--t-accent-ink); margin-top: 0.25rem;
     background: none; border: 0; padding: 0; cursor: pointer;
@@ -281,9 +284,14 @@
     <svg class="w-12 h-12 mx-auto mb-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z"/>
     </svg>
+    {% if focus == 'token' %}
+    <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2" data-i18n="inbox.signin_token_title">Sign in to get your posting token</h2>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="inbox.signin_token_body">After you sign in you will come straight back here, to the button that makes your token.</p>
+    {% else %}
     <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2" data-i18n="inbox.signin_title">Sign in to read the inbox</h2>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-i18n="inbox.signin_body">Anything posted here is private to this site. Writing is authenticated separately, with a token.</p>
-    <a href="{{ url_for('main.login') }}?next=/inbox"
+    {% endif %}
+    <a href="{{ url_for('main.login', next=login_next) }}"
        class="inline-block px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark transition"
        data-i18n="inbox.signin_btn">Sign In</a>
   </div>
@@ -313,40 +321,56 @@
     <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="inbox.empty_hint">Post a message to get started — the example below works as-is once the token is set.</p>
   </div>
 
-  {# The reader's own posting token, which is what makes this feed theirs: a
-     post lands in the feed of whoever's token it carries. The token is shown
-     once, in the answer to the POST that made it, because only its hash is
-     stored. #}
-  <section id="ibToken" class="ib-card p-4 mt-6 text-sm">
-    <h2 class="font-medium text-slate-700 dark:text-slate-300 mb-1" data-i18n="inbox.token_title">Your posting token</h2>
-    <p class="text-xs text-slate-500 dark:text-slate-400 mb-3" data-i18n="inbox.token_body">Anything posted with it appears here, and only you can read it. One token per account: a new one replaces the old.</p>
-    <p id="ibTokenState" class="text-xs text-slate-600 dark:text-slate-400 mb-3"></p>
-    <div id="ibTokenFresh" class="hidden mb-3">
-      <p class="text-xs mb-1" style="color:#b45309" data-i18n="inbox.token_once">Copy it now. It is shown once and cannot be shown again.</p>
-      <div class="flex gap-2 items-start">
-        <pre id="ibTokenValue" class="ib-data" style="margin:0;flex:1;user-select:all"></pre>
-        <button type="button" id="ibTokenCopy" class="ib-filter" data-i18n="inbox.token_copy">Copy</button>
-      </div>
-    </div>
-    <div class="flex gap-2 flex-wrap">
-      <button type="button" id="ibTokenCreate" class="ib-filter" data-i18n="inbox.token_create">Create token</button>
-      <button type="button" id="ibTokenRevoke" class="ib-filter hidden" data-i18n="inbox.token_revoke">Revoke</button>
-    </div>
-    <p id="ibSiteToken" class="hidden text-xs text-slate-500 dark:text-slate-600 mt-3" data-i18n="inbox.site_token_note">Posts made with the site's INBOX_TOKEN land here too, since you own the site.</p>
-  </section>
+  {# How to post, as two steps: get a token, then send posts with it. The
+     token is the reader's own and is what makes this feed theirs: a post lands
+     in the feed of whoever's token it carries. It is shown once, in the answer
+     to the POST that made it, because only its hash is stored, and it can only
+     be made here, signed in. Open by default while the feed is empty, which is
+     when a reader needs it. The usage note is on the page rather than in a
+     README because the person wiring a sender up is the person reading this. #}
+  <details id="ibHow" class="ib-card p-4 mt-6 text-sm">
+    <summary class="cursor-pointer text-slate-700 dark:text-slate-300 font-medium" data-i18n="inbox.how_title">How to post</summary>
 
-  {# The usage note is on the page rather than in a README because the person
-     wiring a sender up is the person reading this, and a curl line they can
-     copy is the difference between "there is an endpoint" and using it. #}
-  <details class="ib-card p-4 mt-6 text-sm">
-    <summary class="cursor-pointer text-slate-700 dark:text-slate-300 font-medium" data-i18n="inbox.how_title">How to post a message</summary>
-    <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 mb-2" data-i18n="inbox.how_body">Every field is optional except that at least one of title or text must be present. Anything else you send is kept verbatim and shown under the message.</p>
-    <pre class="ib-data" id="ibCurl"></pre>
-    <p class="text-xs text-slate-500 dark:text-slate-600 mt-2">
-      <span data-i18n="inbox.retention">Messages are kept for</span>
-      <span id="ibRetention" class="font-medium"></span>
-      <span data-i18n="inbox.retention_days">days.</span>
-    </p>
+    <section id="ibToken" class="mt-4">
+      <h3 class="font-medium text-slate-700 dark:text-slate-300 mb-1" data-i18n="inbox.how_step1">1. Get your posting token</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-2" data-i18n="inbox.token_body">Anything posted with it appears here, and only you can read it. One token per account: a new one replaces the old.</p>
+      <p id="ibTokenState" class="text-xs text-slate-600 dark:text-slate-400 mb-2"></p>
+      <div id="ibTokenFresh" class="hidden mb-2">
+        <p class="text-xs mb-1" style="color:#b45309" data-i18n="inbox.token_once">Copy it now. It is shown once and cannot be shown again.</p>
+        <div class="flex gap-2 items-start">
+          <pre id="ibTokenValue" class="ib-data" style="margin:0;flex:1;user-select:all"></pre>
+          <button type="button" id="ibTokenCopy" class="ib-filter" data-i18n="inbox.token_copy">Copy</button>
+        </div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" id="ibTokenCreate" class="ib-filter" data-i18n="inbox.token_create">Create token</button>
+        <button type="button" id="ibTokenRevoke" class="ib-filter hidden" data-i18n="inbox.token_revoke">Revoke</button>
+      </div>
+      <p class="text-xs text-slate-500 dark:text-slate-600 mt-2" data-i18n="inbox.token_mint_note">Tokens are made only here, while you are signed in: the button calls POST /api/posts/token with your session. A script cannot make one for itself, so every token belongs to the person who made it.</p>
+      <p id="ibSiteToken" class="hidden text-xs text-slate-500 dark:text-slate-600 mt-2" data-i18n="inbox.site_token_note">Posts made with the site's INBOX_TOKEN land here too, since you own the site.</p>
+    </section>
+
+    <section class="mt-5">
+      <h3 class="font-medium text-slate-700 dark:text-slate-300 mb-1" data-i18n="inbox.how_step2">2. Post with it</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-2" data-i18n="inbox.how_step2_body">Send the token in the Authorization header as Bearer &lt;token&gt;, or as X-Inbox-Token. Once you create a token, the command below has it filled in.</p>
+      {# The address to hand anyone else who needs a token: it asks them to
+         sign in, then lands them on step 1. #}
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">
+        <span data-i18n="inbox.token_link_label">Anyone can get their own token at</span>
+        <a id="ibTokenLink" href="{{ url_for('main.posts_token_page') }}" class="underline text-brand">{{ token_url }}</a>
+        <span data-i18n="inbox.token_link_after">(they sign in first, then land on step 1).</span>
+      </p>
+      <div class="flex gap-2 items-start">
+        <pre class="ib-data" id="ibCurl" style="margin:0;flex:1"></pre>
+        <button type="button" id="ibCurlCopy" class="ib-filter" data-i18n="inbox.token_copy">Copy</button>
+      </div>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-2" data-i18n="inbox.how_body">Every field is optional except that at least one of title or text must be present. Anything else you send is kept verbatim and shown under the message.</p>
+      <p class="text-xs text-slate-500 dark:text-slate-600 mt-2">
+        <span data-i18n="inbox.retention">Messages are kept for</span>
+        <span id="ibRetention" class="font-medium"></span>
+        <span data-i18n="inbox.retention_days">days.</span>
+      </p>
+    </section>
   </details>
 
   {% endif %}
@@ -728,12 +752,17 @@ function renderBoard(board, rows) {
 let _retention = null;
 let _freshToken = '';   // shown once, then only for as long as the page is open
 let _tokenInfo = null;
+const TOKEN_URL = {{ token_url|tojson }};
+const FOCUS = {{ focus|tojson }};   // 'token' at /posts/token
 
 function renderCurl(retention) {
   const el = document.getElementById('ibCurl');
   if (!el) return;
+  // Without a fresh token the placeholder says where to get one, on a comment
+  // line a shell ignores, so the command still pastes as-is once it is filled.
   el.textContent =
-    `curl -X POST ${location.origin}/api/posts \\\n`
+    (_freshToken ? '' : `# <YOUR_TOKEN>: ${TOKEN_URL}\n`)
+    + `curl -X POST ${location.origin}/api/posts \\\n`
     + `  -H 'Authorization: Bearer ${_freshToken || '<YOUR_TOKEN>'}' \\\n`
     + `  -H 'Content-Type: application/json' \\\n`
     + `  -d '{"title":"Hello","text":"from my script",`
@@ -765,11 +794,17 @@ async function loadInbox() {
     renderList();
     renderCurl(_retention);
     document.getElementById('ibSiteToken').classList.toggle('hidden', !body.site_token);
+    // An empty feed is a reader who has not posted yet: show them how.
+    if (!_messages.length) document.getElementById('ibHow').open = true;
   } catch (e) {
     err.textContent = I18n.t('inbox.err_unknown') || 'Could not load the inbox.';
     err.classList.remove('hidden');
   } finally {
     loading.classList.add('hidden');
+    // Whatever the feed did, the how-to still says how, and /posts/token still
+    // lands on step 1: neither depends on reading the posts.
+    renderCurl(_retention);
+    focusToken();
   }
 }
 
@@ -794,6 +829,19 @@ function paintToken() {
 function tokenFailed() {
   document.getElementById('ibTokenState').textContent =
     I18n.t('inbox.token_err') || 'Could not reach the token store. Nothing was changed.';
+}
+
+/* /posts/token: open the how-to and bring step 1 into view, once the feed
+   above it has rendered, or the scroll lands short of it. */
+let _focused = false;
+function focusToken() {
+  if (FOCUS !== 'token' || _focused) return;
+  _focused = true;
+  document.getElementById('ibHow').open = true;
+  const step = document.getElementById('ibToken');
+  step.scrollIntoView({ block: 'center' });
+  step.classList.add('ib-focus');
+  setTimeout(() => step.classList.remove('ib-focus'), 2400);
 }
 
 async function loadToken() {
@@ -833,14 +881,17 @@ document.getElementById('ibTokenRevoke').addEventListener('click', async () => {
   } catch (_) { tokenFailed(); }
 });
 
-document.getElementById('ibTokenCopy').addEventListener('click', async (ev) => {
-  const btn = ev.currentTarget;
+async function copyText(btn, text) {
   try {
-    await navigator.clipboard.writeText(_freshToken);
+    await navigator.clipboard.writeText(text);
     btn.textContent = I18n.t('inbox.token_copied') || 'Copied';
     setTimeout(() => { btn.textContent = I18n.t('inbox.token_copy') || 'Copy'; }, 2000);
-  } catch (_) { /* the token stays selectable in the box beside the button */ }
-});
+  } catch (_) { /* the text stays selectable in the box beside the button */ }
+}
+document.getElementById('ibTokenCopy').addEventListener('click',
+  ev => copyText(ev.currentTarget, _freshToken));
+document.getElementById('ibCurlCopy').addEventListener('click',
+  ev => copyText(ev.currentTarget, document.getElementById('ibCurl').textContent));
 
 // The list is composed in JS, so I18n.apply() cannot reach it.
 document.addEventListener('i18n:langchange', () => {

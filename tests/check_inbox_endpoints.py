@@ -348,7 +348,10 @@ class InboxEndpoints(unittest.TestCase):
         self.assertEqual(r.get_json()["reason"], "signed_out")
 
     def test_reading_signed_in_returns_the_readers_feed(self):
+        import time
+
         self.post({"title": "One", "source": "cron"})
+        time.sleep(0.005)   # the sort key is millisecond time; one tick apart
         self.post({"title": "Two", "source": "bot"})
         self.sign_in(SITE_OWNER)
         body = self.client.get("/api/posts").get_json()
@@ -451,6 +454,35 @@ class InboxEndpoints(unittest.TestCase):
         self.assertIn("loadToken()", html)
         self.assertIn("<YOUR_TOKEN>", html)
         self.assertNotIn("<INBOX_TOKEN>", html)
+
+    # ── /posts/token: the link to hand anyone who needs a token ───────────
+    def test_the_token_link_survives_sign_in(self):
+        """Signed out, the card's button signs in and comes back to step 1."""
+        html = self.client.get("/posts/token").data.decode()
+        self.assertIn("inbox.signin_token_title", html)
+        self.assertIn('href="/login?next=/posts/token"', html)
+        # The feed's own card still returns to the feed, not the old /inbox.
+        plain = self.client.get("/posts").data.decode()
+        self.assertIn('href="/login?next=/posts"', plain)
+        self.assertNotIn("next=/inbox", plain)
+
+    def test_the_token_link_opens_step_one_when_signed_in(self):
+        self.sign_in("alice@example.com")
+        html = self.client.get("/posts/token").data.decode()
+        self.assertIn('const FOCUS = "token";', html)
+        self.assertIn('id="ibToken"', html)
+        self.assertIn('const FOCUS = "";', self.client.get("/posts").data.decode())
+
+    def test_the_how_to_says_where_a_token_comes_from(self):
+        """The curl example asks for a token, so the page must say where one is
+        got: step 1 makes it, and the link is the address to share."""
+        self.sign_in("alice@example.com")
+        html = self.client.get("/posts").data.decode()
+        self.assertIn('data-i18n="inbox.how_step1"', html)
+        self.assertIn('data-i18n="inbox.token_mint_note"', html)
+        # Absolute, so it can be pasted into a message to somebody else.
+        self.assertRegex(html, r'id="ibTokenLink" href="/posts/token"[^>]*>'
+                               r'https?://[^<]+/posts/token</a>')
 
     def test_the_page_escapes_everything_it_renders(self):
         """Every field here came from a token holder, not a signed-in human, so
