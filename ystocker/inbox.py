@@ -42,14 +42,35 @@ signed-in-only. A token that leaks is then a nuisance — somebody can fill your
 inbox — rather than a publishing channel onto a public domain in your name.
 Those are very different incidents, and the difference costs one decorator.
 
+Whose posts
+-----------
+Every post belongs to one address, and a reader sees only their own. Until
+2026-10-06 the feed was one list that any signed-in reader could open: 303
+posts, 293 of them the site owner's forwarded mail, readable by every account
+on trade-agents.com.
+
+The token a post arrives with decides whose it is. ``INBOX_TOKEN`` is the site
+owner's (:func:`site_owner`), because their scripts were the ones holding it.
+Anybody else signs in and makes a personal token on ``/posts``
+(:func:`issue_token`). That token is stored only as its SHA-256, under
+``_token``, and is shown once. Each address has one token: making a new one
+revokes the old, and ``_owner`` remembers which hash is current. A token cannot
+address somebody else's feed, so a leaked one fills one inbox, not every inbox.
+
 Storage
 -------
-``ystocker-inbox``, hash ``bucket`` (``YYYY-MM``) + range ``sk``
-(``<iso8601>#<id>``). Bucketed by month rather than one fixed partition so the
-partition cannot grow without bound, and range-keyed by time so "the most
-recent fifty" is a Query with ``ScanIndexForward=False`` rather than a Scan —
-on ``PAY_PER_REQUEST`` a Scan is billed by volume scanned, which is the trap
+``ystocker-inbox``, hash ``bucket`` (``<owner>#YYYY-MM``) + range ``sk``
+(``<iso8601>#<id>``). Bucketed by owner and month rather than one fixed
+partition so the partition cannot grow without bound and one reader's Query
+never reads another's rows, and range-keyed by time so "the most recent fifty"
+is a Query with ``ScanIndexForward=False`` rather than a Scan — on
+``PAY_PER_REQUEST`` a Scan is billed by volume scanned, which is the trap
 ``ystocker-dca-history``'s key schema already documents.
+
+Rows written before posts had owners sit under a bare ``YYYY-MM`` and are the
+site owner's, so :func:`recent` reads those buckets for that address alone. They
+expire by TTL by 2027-01-05, and the legacy read can go then. The two token
+partitions carry no ``expires_at``, so TTL never removes a token.
 
 Reading across a month boundary walks back a bounded number of buckets, so a
 quiet January does not return an empty page while December is full.
@@ -62,6 +83,7 @@ only grows.
 from __future__ import annotations
 
 import base64
+import hashlib
 import hmac
 import json
 import re
@@ -79,6 +101,7 @@ __all__ = [
     "TABLE_NAME", "LEVELS", "MAX_BODY_BYTES", "MAX_RAW_BYTES", "RETENTION_DAYS",
     "token_configured", "check_token", "normalise", "InboxError",
     "put", "recent", "sources", "StoreUnavailable", "parse_email",
+    "site_owner", "owner_for_token", "issue_token", "token_info", "revoke_token",
 ]
 
 TABLE_NAME = os.environ.get("INBOX_TABLE", "ystocker-inbox").strip()
@@ -200,6 +223,39 @@ def check_token(presented: Optional[str]) -> bool:
     return hmac.compare_digest(presented.strip(), expected)
 
 
+def site_owner() -> str:
+    """The address ``INBOX_TOKEN`` posts for: ``INBOX_OWNER``, else the owner."""
+    from ystocker.quota import OWNER_EMAIL
+
+    return (os.environ.get("INBOX_OWNER") or OWNER_EMAIL).strip().lower()
+
+
+def owner_for_token(presented: Optional[str]) -> Optional[str]:
+    """Whose feed a presented token posts to, or ``None`` when it is nobody's.
+
+    The site token is compared in constant time, and only when one is
+    configured. Anything else is looked up by its hash. Raises
+    :class:`StoreUnavailable` when that lookup cannot be made: the route answers
+    503 rather than 401, because a real token refused during an outage reads to
+    its script as revoked.
+    """
+    presented = (presented or "").strip()
+    if not presented:
+        return None
+    if check_token(presented):
+        return site_owner()
+    table = _get_table()
+    if table is None:
+        raise StoreUnavailable(TABLE_NAME)
+    try:
+        item = table.get_item(Key={"bucket": TOKEN_PARTITION, "sk": _digest(presented)},
+                              ConsistentRead=True).get("Item")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("inbox: token lookup failed: %s", exc)
+        raise StoreUnavailable(str(exc)) from exc
+    return (item or {}).get("owner") or None
+
+
 def token_from_headers(headers: Mapping[str, str]) -> str:
     """Bearer header or ``X-Inbox-Token``, whichever is present.
 
@@ -214,6 +270,102 @@ def token_from_headers(headers: Mapping[str, str]) -> str:
     return (headers.get("X-Inbox-Token") or "").strip()
 
 
+#: Personal tokens, by the SHA-256 of the token: ``{owner, created_at}``.
+TOKEN_PARTITION = "_token"
+#: Each address's current token: ``{token_hash, created_at, hint}``.
+OWNER_PARTITION = "_owner"
+
+
+def _digest(token: str) -> str:
+    """A token as stored. SHA-256 is enough: the token is 32 random bytes, so
+    there is no dictionary to try, and a slow hash would only slow the check."""
+    return hashlib.sha256(token.strip().encode("utf-8")).hexdigest()
+
+
+def _owner_key(owner: Optional[str]) -> str:
+    key = (owner or "").strip().lower()
+    if "@" not in key:
+        raise InboxError("no_owner", "a post needs the address it belongs to")
+    return key
+
+
+def _now_iso(now: Optional[datetime] = None) -> str:
+    stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return stamp.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def token_info(owner: str) -> Optional[dict[str, Any]]:
+    """``{created_at, hint}`` for the address's current token, or ``None``.
+
+    Never the token itself, which is not stored: the page can say when a token
+    was made and how it ends, so its holder can tell which one a script has.
+    """
+    table = _get_table()
+    if table is None:
+        raise StoreUnavailable(TABLE_NAME)
+    try:
+        item = table.get_item(Key={"bucket": OWNER_PARTITION, "sk": _owner_key(owner)},
+                              ConsistentRead=True).get("Item")
+    except InboxError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise StoreUnavailable(str(exc)) from exc
+    if not item or not item.get("token_hash"):
+        return None
+    return {"created_at": item.get("created_at"), "hint": item.get("hint")}
+
+
+def issue_token(owner: str, *, now: Optional[datetime] = None) -> tuple[str, dict[str, Any]]:
+    """A new personal token for *owner*, revoking the one before it.
+
+    Returns ``(token, info)``. The token is returned once and never again.
+
+    The writes are ordered so a failure part-way leaves no live token that
+    nobody was shown: the old token goes first, the new one second, the pointer
+    to it last. If the last write fails the route answers 503 and the new token,
+    which nobody received, is unusable in practice; a retry replaces it.
+    """
+    key = _owner_key(owner)
+    table = _get_table()
+    if table is None:
+        raise StoreUnavailable(TABLE_NAME)
+    token = secrets.token_urlsafe(32)
+    info = {"created_at": _now_iso(now), "hint": token[-4:]}
+    try:
+        previous = table.get_item(Key={"bucket": OWNER_PARTITION, "sk": key},
+                                  ConsistentRead=True).get("Item") or {}
+        if previous.get("token_hash"):
+            table.delete_item(Key={"bucket": TOKEN_PARTITION, "sk": previous["token_hash"]})
+        digest = _digest(token)
+        table.put_item(Item={"bucket": TOKEN_PARTITION, "sk": digest, "owner": key,
+                             "created_at": info["created_at"]})
+        table.put_item(Item={"bucket": OWNER_PARTITION, "sk": key, "token_hash": digest,
+                             **info})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("inbox: token issue failed for %s: %s", key, exc)
+        raise StoreUnavailable(str(exc)) from exc
+    return token, info
+
+
+def revoke_token(owner: str) -> bool:
+    """Revoke *owner*'s token. True if there was one."""
+    key = _owner_key(owner)
+    table = _get_table()
+    if table is None:
+        raise StoreUnavailable(TABLE_NAME)
+    try:
+        previous = table.get_item(Key={"bucket": OWNER_PARTITION, "sk": key},
+                                  ConsistentRead=True).get("Item") or {}
+        if not previous.get("token_hash"):
+            return False
+        table.delete_item(Key={"bucket": TOKEN_PARTITION, "sk": previous["token_hash"]})
+        table.delete_item(Key={"bucket": OWNER_PARTITION, "sk": key})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("inbox: token revoke failed for %s: %s", key, exc)
+        raise StoreUnavailable(str(exc)) from exc
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Validation — pure, so the rules are testable without AWS
 # ---------------------------------------------------------------------------
@@ -223,8 +375,10 @@ def _clip(value: Any, limit: int) -> str:
     return text.strip()[:limit]
 
 
-def normalise(body: Any, *, now: Optional[datetime] = None) -> dict[str, Any]:
-    """Validate and shape one posted message. Pure; raises :class:`InboxError`.
+def normalise(body: Any, *, owner: str,
+              now: Optional[datetime] = None) -> dict[str, Any]:
+    """Validate and shape one posted message for *owner*. Pure; raises
+    :class:`InboxError`.
 
     The promoted fields are optional individually and required collectively: a
     row with neither ``title`` nor ``text`` renders as an empty card, which is
@@ -281,13 +435,15 @@ def normalise(body: Any, *, now: Optional[datetime] = None) -> dict[str, Any]:
             raise InboxError("data_too_large",
                              f"the extra fields exceed {MAX_DATA_BYTES} bytes")
 
+    key = _owner_key(owner)
     stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     ident = secrets.token_urlsafe(9)
     iso = stamp.isoformat(timespec="milliseconds").replace("+00:00", "Z")
     return {
-        "bucket": stamp.strftime("%Y-%m"),
+        "bucket": f"{key}#{stamp.strftime('%Y-%m')}",
         "sk": f"{iso}#{ident}",
         "id": ident,
+        "owner": key,
         "received_at": iso,
         "title": title,
         "text": text,
@@ -504,34 +660,43 @@ def _buckets(now: Optional[datetime] = None) -> list[str]:
     return out
 
 
-def recent(limit: int = 50, *, now: Optional[datetime] = None) -> list[dict[str, Any]]:
-    """The newest *limit* messages, newest first.
+def recent(owner: str, limit: int = 50, *,
+           now: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """*owner*'s newest *limit* messages, newest first.
 
     Walks monthly buckets backwards only until it has enough, so the usual case
     is one Query. A quiet month costs one more, bounded by
     :data:`MAX_BUCKETS` — without that walk a page opened on the 1st of a month
     would show nothing while the previous month was full.
+
+    For the site owner each month also reads the bucket rows had before posts
+    had owners, merged by time. Nobody else's read touches those rows.
     """
+    key = _owner_key(owner)
     table = _get_table()
     if table is None:
         raise StoreUnavailable(TABLE_NAME)
     from boto3.dynamodb.conditions import Key
 
+    legacy = key == site_owner()
     limit = max(1, min(int(limit or 50), 200))
     rows: list[dict[str, Any]] = []
-    for bucket in _buckets(now):
+    for month in _buckets(now):
         if len(rows) >= limit:
             break
-        try:
-            resp = table.query(
-                KeyConditionExpression=Key("bucket").eq(bucket),
-                ScanIndexForward=False,
-                Limit=limit - len(rows))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("inbox: query failed for %s: %s", bucket, exc)
-            raise StoreUnavailable(str(exc)) from exc
-        for item in resp.get("Items", []):
-            rows.append(_thaw(item))
+        found: list[dict[str, Any]] = []
+        for bucket in ([f"{key}#{month}", month] if legacy else [f"{key}#{month}"]):
+            try:
+                resp = table.query(
+                    KeyConditionExpression=Key("bucket").eq(bucket),
+                    ScanIndexForward=False,
+                    Limit=limit - len(rows))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("inbox: query failed for %s: %s", bucket, exc)
+                raise StoreUnavailable(str(exc)) from exc
+            found += resp.get("Items", [])
+        found.sort(key=lambda item: item.get("sk", ""), reverse=True)
+        rows += [_thaw(item) for item in found]
     return rows[:limit]
 
 
@@ -542,7 +707,7 @@ def _thaw(item: Mapping[str, Any]) -> dict[str, Any]:
     handed back as a string rather than dropped, because the failure is ours and
     losing the message hides it.
     """
-    out = {k: v for k, v in item.items() if k not in ("expires_at",)}
+    out = {k: v for k, v in item.items() if k not in ("expires_at", "bucket")}
     raw = out.get("data")
     if isinstance(raw, str):
         try:

@@ -2,9 +2,11 @@
 End-to-end check of /api/posts and /posts, through Flask's test client.
 
 Named ``check_`` so ``unittest discover`` skips it: it builds a real app (which
-starts background threads). No network and no AWS — the store is swapped for an
+starts background threads). No network and no AWS — the table is swapped for an
 in-memory stand-in, because what is being checked here is the *route*: the order
-of its guards, what it returns, and who may read it.
+of its guards, what it returns, and who may read it. Since 2026-10-06 that
+includes whose feed a post lands in, so the inbox module's own key logic runs
+against the stand-in rather than being stubbed out.
 
 matplotlib is stubbed before ``ystocker.routes`` is imported, for the broken
 Homebrew pyexpat this repo's dev checkout has (see ``check_dca_endpoints.py``).
@@ -51,9 +53,11 @@ os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.devnull
 os.environ["AWS_CONFIG_FILE"] = os.devnull
 os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
 
-from ystocker import create_app, inbox                              # noqa: E402
+from ystocker import create_app, inbox, quota                       # noqa: E402
 
 TOKEN = "test-token-value"
+SITE_OWNER = "owner@example.com"
+os.environ["INBOX_OWNER"] = SITE_OWNER
 def _build_app():
     import threading
     import ystocker
@@ -67,26 +71,48 @@ def _build_app():
 
 
 
-class _MemStore:
-    """Stands in for DynamoDB. Also lets a test make the store fail on demand,
-    which is the branch that matters most: a POST accepted and dropped is worse
-    than one refused, and a GET that answers "no messages" when it means "cannot
-    reach the table" is the one wrong answer on this page."""
+class _MemTable:
+    """Stands in for DynamoDB, keyed (bucket, sk). Also lets a test make the
+    table fail on demand, which is the branch that matters most: a POST accepted
+    and dropped is worse than one refused, and a GET that answers "no messages"
+    when it means "cannot reach the table" is the one wrong answer on this page."""
 
     def __init__(self) -> None:
-        self.rows: list[dict] = []
+        self.items: dict[tuple[str, str], dict] = {}
         self.fail = False
 
-    def put(self, record):
+    def _check(self):
         if self.fail:
-            raise inbox.StoreUnavailable("stubbed")
-        self.rows.append(dict(record))
-        return dict(record)
+            raise RuntimeError("stubbed outage")
 
-    def recent(self, limit=50, **_kw):
-        if self.fail:
-            raise inbox.StoreUnavailable("stubbed")
-        return list(reversed(self.rows))[:limit]
+    def put_item(self, Item):
+        self._check()
+        self.items[(Item["bucket"], Item["sk"])] = dict(Item)
+
+    def get_item(self, Key, ConsistentRead=False):
+        self._check()
+        item = self.items.get((Key["bucket"], Key["sk"]))
+        return {"Item": dict(item)} if item else {}
+
+    def delete_item(self, Key):
+        self._check()
+        self.items.pop((Key["bucket"], Key["sk"]), None)
+        return {}
+
+    def query(self, KeyConditionExpression, ScanIndexForward=True, Limit=None):
+        self._check()
+        name, value = KeyConditionExpression.get_expression()["values"]
+        hits = sorted((i for i in self.items.values() if i.get(name.name) == value),
+                      key=lambda i: i["sk"], reverse=not ScanIndexForward)
+        return {"Items": [dict(i) for i in hits[:Limit]]}
+
+    @property
+    def rows(self) -> list[dict]:
+        """The stored posts, oldest first, without the token rows."""
+        posts = [i for (b, _), i in self.items.items()
+                 if b not in (inbox.TOKEN_PARTITION, inbox.OWNER_PARTITION)]
+        return [inbox._thaw(i) | {"owner": i.get("owner")}
+                for i in sorted(posts, key=lambda i: i["sk"])]
 
 
 class InboxEndpoints(unittest.TestCase):
@@ -98,9 +124,17 @@ class InboxEndpoints(unittest.TestCase):
         cls.client = cls.app.test_client()
 
     def setUp(self):
-        self.store = _MemStore()
-        self._put, self._recent = inbox.put, inbox.recent
-        inbox.put, inbox.recent = self.store.put, self.store.recent
+        import tempfile
+
+        self.store = _MemTable()
+        self._table = inbox._table
+        inbox._table = self.store
+        # The daily ceilings live in quota.py's counter file, which is this
+        # checkout's cache otherwise.
+        self._quota_dir, self._lock = quota.QUOTA_DIR, quota._LOCK_PATH
+        self._tmp = tempfile.TemporaryDirectory()
+        quota.QUOTA_DIR = quota.Path(self._tmp.name)
+        quota._LOCK_PATH = quota.QUOTA_DIR / "quota.lock"
         os.environ["INBOX_TOKEN"] = TOKEN
         # The test client keeps its cookie jar across methods, so a test that
         # signs in leaves every later one signed in — which would make the two
@@ -110,8 +144,15 @@ class InboxEndpoints(unittest.TestCase):
             sess.clear()
 
     def tearDown(self):
-        inbox.put, inbox.recent = self._put, self._recent
+        inbox._table = self._table
+        quota.QUOTA_DIR, quota._LOCK_PATH = self._quota_dir, self._lock
+        self._tmp.cleanup()
         os.environ["INBOX_TOKEN"] = TOKEN
+        os.environ.pop("INBOX_USER_DAILY_LIMIT", None)
+
+    def sign_in(self, email):
+        with self.client.session_transaction() as sess:
+            sess["user_email"] = email
 
     def post(self, body, token=TOKEN, **kw):
         headers = {"Content-Type": "application/json"}
@@ -145,11 +186,13 @@ class InboxEndpoints(unittest.TestCase):
 
     def test_an_unconfigured_token_shuts_the_door(self):
         """The whole security posture in one assertion. "No token set" must
-        return 503 and store nothing, never fall through to accepting."""
+        store nothing, never fall through to accepting: an unset INBOX_TOKEN
+        matches no token, so even its old value is refused."""
         os.environ.pop("INBOX_TOKEN", None)
-        r = self.post({"title": "Hi"}, token="anything")
-        self.assertEqual(r.status_code, 503)
-        self.assertEqual(r.get_json()["reason"], "not_configured")
+        for presented in ("anything", TOKEN):
+            r = self.post({"title": "Hi"}, token=presented)
+            self.assertEqual(r.status_code, 401)
+            self.assertEqual(r.get_json()["reason"], "unauthorized")
         self.assertEqual(self.store.rows, [])
 
     def test_the_token_is_checked_before_the_body_is_parsed(self):
@@ -304,21 +347,88 @@ class InboxEndpoints(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.get_json()["reason"], "signed_out")
 
-    def test_reading_signed_in_returns_the_feed(self):
+    def test_reading_signed_in_returns_the_readers_feed(self):
         self.post({"title": "One", "source": "cron"})
         self.post({"title": "Two", "source": "bot"})
-        with self.client.session_transaction() as sess:
-            sess["user_email"] = "someone@example.com"
+        self.sign_in(SITE_OWNER)
         body = self.client.get("/api/posts").get_json()
         self.assertEqual(body["count"], 2)
         self.assertEqual(body["messages"][0]["title"], "Two")   # newest first
         self.assertEqual(body["sources"], ["bot", "cron"])
+        self.assertTrue(body["site_token"])
+
+    # ── per person: a post is its token holder's, and only theirs to read ──
+    def test_the_site_token_posts_into_the_site_owners_feed_alone(self):
+        """Until 2026-10-06 every signed-in reader saw every post, the owner's
+        forwarded mail included."""
+        self.post({"title": "the owner's mail"})
+        self.assertEqual(self.store.rows[0]["owner"], SITE_OWNER)
+        self.sign_in("someone@example.com")
+        body = self.client.get("/api/posts").get_json()
+        self.assertEqual(body["count"], 0)
+        self.assertFalse(body["site_token"])
+
+    def test_a_personal_token_posts_into_its_holders_feed(self):
+        self.sign_in("alice@example.com")
+        made = self.client.post("/api/posts/token")
+        self.assertEqual(made.status_code, 201)
+        token = made.get_json()["token"]
+        self.assertEqual(self.post({"title": "for alice"}, token=token).status_code, 201)
+        self.assertEqual(self.store.rows[-1]["owner"], "alice@example.com")
+        self.assertEqual([m["title"] for m in self.client.get("/api/posts").get_json()["messages"]],
+                         ["for alice"])
+        self.sign_in("bob@example.com")
+        self.assertEqual(self.client.get("/api/posts").get_json()["count"], 0)
+        self.sign_in(SITE_OWNER)
+        self.assertEqual(self.client.get("/api/posts").get_json()["count"], 0)
+
+    def test_the_token_is_shown_once_and_never_again(self):
+        self.sign_in("alice@example.com")
+        token = self.client.post("/api/posts/token").get_json()["token"]
+        info = self.client.get("/api/posts/token").get_json()
+        self.assertNotIn("token", info)
+        self.assertNotIn(token, json.dumps(info))
+        self.assertEqual(info["info"]["hint"], token[-4:])
+
+    def test_a_replaced_or_revoked_token_stops_posting(self):
+        self.sign_in("alice@example.com")
+        first = self.client.post("/api/posts/token").get_json()["token"]
+        second = self.client.post("/api/posts/token").get_json()["token"]
+        self.assertEqual(self.post({"title": "x"}, token=first).status_code, 401)
+        self.assertEqual(self.post({"title": "x"}, token=second).status_code, 201)
+        revoked = self.client.delete("/api/posts/token")
+        self.assertTrue(revoked.get_json()["revoked"])
+        self.assertEqual(self.post({"title": "x"}, token=second).status_code, 401)
+        self.assertIsNone(self.client.get("/api/posts/token").get_json()["info"])
+
+    def test_the_token_endpoints_are_signed_in_only(self):
+        for method in ("get", "post", "delete"):
+            r = getattr(self.client, method)("/api/posts/token")
+            self.assertEqual(r.status_code, 401, method)
+            self.assertEqual(r.get_json()["reason"], "signed_out")
+        self.assertEqual(self.store.items, {})
+
+    def test_a_token_lookup_outage_is_a_503_not_a_401(self):
+        """401 would tell a script its token was revoked."""
+        self.store.fail = True
+        r = self.post({"title": "x"}, token="a-personal-token")
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.get_json()["reason"], "store_unavailable")
+
+    def test_one_persons_ceiling_is_not_everybodys(self):
+        os.environ["INBOX_USER_DAILY_LIMIT"] = "1"
+        self.sign_in("alice@example.com")
+        alice = self.client.post("/api/posts/token").get_json()["token"]
+        self.assertEqual(self.post({"title": "1"}, token=alice).status_code, 201)
+        r = self.post({"title": "2"}, token=alice)
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(r.get_json()["reason"], "rate_limited")
+        self.assertEqual(self.post({"title": "site"}).status_code, 201)
 
     def test_a_read_failure_is_a_503_not_an_empty_list(self):
         """"No messages" is the one wrong answer on the page whose job is to
         show them — a reader cannot tell it from "nothing was sent"."""
-        with self.client.session_transaction() as sess:
-            sess["user_email"] = "someone@example.com"
+        self.sign_in("someone@example.com")
         self.store.fail = True
         r = self.client.get("/api/posts")
         self.assertEqual(r.status_code, 503)
@@ -332,11 +442,15 @@ class InboxEndpoints(unittest.TestCase):
         self.assertNotIn("loadInbox()", html)
 
     def test_the_page_renders_the_feed_when_signed_in(self):
-        with self.client.session_transaction() as sess:
-            sess["user_email"] = "someone@example.com"
+        self.sign_in("someone@example.com")
         html = self.client.get("/posts").data.decode()
         self.assertIn("loadInbox()", html)
         self.assertIn('id="ibList"', html)
+        # The reader's own token, managed on the page.
+        self.assertIn('id="ibToken"', html)
+        self.assertIn("loadToken()", html)
+        self.assertIn("<YOUR_TOKEN>", html)
+        self.assertNotIn("<INBOX_TOKEN>", html)
 
     def test_the_page_escapes_everything_it_renders(self):
         """Every field here came from a token holder, not a signed-in human, so

@@ -14939,16 +14939,18 @@ def api_inbox_post():
     so the order of checks below is the security design rather than plumbing:
 
     1. **Token first, before the body is read.** A caller without a credential
-       must not be able to make us parse — or size, or store — anything. It is
-       also why an unconfigured token returns 503: "no token set" must never be
-       read as "no check needed", which is the mistake that turns a missing SSM
-       parameter into an open relay.
+       must not be able to make us parse — or size, or store — anything. The
+       token also decides whose feed the post lands in (`inbox.owner_for_token`):
+       the site owner's for `INBOX_TOKEN`, the holder's for a personal one. An
+       unset `INBOX_TOKEN` matches nothing, so "no token set" is never read as
+       "no check needed".
     2. **Size before parse.** `MAX_BODY_BYTES` is checked against the declared
        length and against what actually arrived, because `Content-Length` is
        supplied by the client and a chunked body has none at all.
     3. **A daily ceiling**, for the same reason `/agents` has one: the token is
        a bearer credential with nothing behind it, so the bound on damage from
-       a leak is whatever the counter says.
+       a leak is whatever the counter says. Per address as well as in total, so
+       one person's runaway script cannot spend everybody's allowance.
 
     Returns 201 with the stored id. Every refusal is named in `reason`, because
     the caller is a script — a 400 with prose in it is something a person reads
@@ -14956,11 +14958,13 @@ def api_inbox_post():
     """
     from ystocker import inbox
 
-    if not inbox.token_configured():
-        log.warning("Inbox: POST refused — INBOX_TOKEN is not configured")
-        return jsonify({"error": "Inbox is not configured.",
-                        "reason": "not_configured"}), 503
-    if not inbox.check_token(inbox.token_from_headers(request.headers)):
+    try:
+        owner = inbox.owner_for_token(inbox.token_from_headers(request.headers))
+    except inbox.StoreUnavailable as exc:
+        log.warning("Inbox: token lookup unavailable: %s", exc)
+        return jsonify({"error": "Store unavailable.",
+                        "reason": "store_unavailable"}), 503
+    if owner is None:
         log.info("Inbox: POST rejected (bad or missing token)")
         return jsonify({"error": "Unauthorized.", "reason": "unauthorized"}), 401
 
@@ -14979,7 +14983,7 @@ def api_inbox_post():
         return jsonify({"error": "Body too large.", "reason": "too_large",
                         "max_bytes": ceiling}), 413
 
-    ok, usage = _inbox_try_consume()
+    ok, usage = _inbox_try_consume(owner)
     if not ok:
         return jsonify({"error": "Daily inbox limit reached.",
                         "reason": "rate_limited", **usage}), 429
@@ -15012,7 +15016,7 @@ def api_inbox_post():
                             "reason": "bad_json"}), 400
 
     try:
-        record = inbox.normalise(body)
+        record = inbox.normalise(body, owner=owner)
     except inbox.InboxError as exc:
         return jsonify({"error": exc.detail or exc.reason,
                         "reason": exc.reason}), 400
@@ -15031,8 +15035,13 @@ def api_inbox_post():
                     "received_at": record["received_at"], **usage}), 201
 
 
-def _inbox_try_consume() -> tuple[bool, dict]:
+def _inbox_try_consume(owner: str) -> tuple[bool, dict]:
     """One slot off the daily inbox allowance, on quota.py's locked counter.
+
+    Two ceilings: `INBOX_DAILY_LIMIT` (500) for everybody together and
+    `INBOX_USER_DAILY_LIMIT` (200) for one address, so one person's runaway
+    script cannot spend everyone else's day. The usage returned is the
+    address's own, which is the one its script can act on.
 
     Reuses that file's lock so two gunicorn workers cannot both read the same
     count and write the same increment — the lost update this app already
@@ -15041,15 +15050,20 @@ def _inbox_try_consume() -> tuple[bool, dict]:
     """
     from ystocker import quota
 
-    limit = quota._int_env("INBOX_DAILY_LIMIT", 500)
+    limit_all = quota._int_env("INBOX_DAILY_LIMIT", 500)
+    limit = quota._int_env("INBOX_USER_DAILY_LIMIT", 200)
     day = quota.today()
     try:
         with quota._Guard():
             data = quota._read(day)
-            used = int((data.setdefault("inbox", {})).get("all", 0))
-            if used >= limit:
+            counts = data.setdefault("inbox", {})
+            used_all = int(counts.get("all", 0))
+            mine = counts.setdefault("by_owner", {})
+            used = int(mine.get(owner, 0))
+            if used >= limit or used_all >= limit_all:
                 return False, {"used": used, "limit": limit, "remaining": 0}
-            data["inbox"]["all"] = used + 1
+            counts["all"] = used_all + 1
+            mine[owner] = used + 1
             data["day"] = day
             quota._write(day, data)
     except Exception as exc:  # noqa: BLE001 - never 500 on the counter
@@ -15062,11 +15076,14 @@ def _inbox_try_consume() -> tuple[bool, dict]:
 @bp.route("/api/posts", methods=["GET"])
 @bp.route("/api/inbox", methods=["GET"])
 def api_inbox_list():
-    """The feed, for the page. Signed in only.
+    """The reader's own feed, for the page. Signed in only.
 
     Writes are authenticated and reads are gated, which is not belt-and-braces:
     it decides what a leaked token *is*. Gated, somebody who takes it can fill
     your inbox; ungated, they can publish to trade-agents.com under your name.
+
+    Only the reader's posts, VIP or not. Until 2026-10-06 this returned every
+    post to every signed-in reader, the owner's forwarded mail included.
     """
     email = session.get("user_email")
     if not email:
@@ -15076,7 +15093,7 @@ def api_inbox_list():
     from ystocker import inbox
 
     try:
-        rows = inbox.recent(request.args.get("limit", type=int) or 50)
+        rows = inbox.recent(email, request.args.get("limit", type=int) or 50)
     except inbox.StoreUnavailable as exc:
         # Fails loudly rather than rendering as "you have no messages", which
         # is the one wrong answer on the page whose job is to show them.
@@ -15089,8 +15106,44 @@ def api_inbox_list():
         "sources": inbox.sources(rows),
         "levels": list(inbox.LEVELS),
         "retention_days": inbox.RETENTION_DAYS,
-        "configured": inbox.token_configured(),
+        # Whether the site's INBOX_TOKEN posts here, which only its owner needs
+        # telling: their scripts hold it, and their feed is where it lands.
+        "site_token": (inbox.token_configured()
+                       and email.strip().lower() == inbox.site_owner()),
     })
+
+
+@bp.route("/api/posts/token", methods=["GET", "POST", "DELETE"])
+def api_inbox_token():
+    """The reader's personal posting token: GET what exists, POST a new one
+    (which revokes the old), DELETE it.
+
+    The token itself is in the POST's answer and nowhere else, ever: only its
+    hash is stored. Signed in only, and a session cookie is SameSite=Lax here,
+    so another site cannot make a reader's browser mint or revoke one.
+    """
+    email = session.get("user_email")
+    if not email:
+        return jsonify({"error": "Sign in to manage your posting token.",
+                        "reason": "signed_out"}), 401
+
+    from ystocker import inbox
+
+    try:
+        if request.method == "POST":
+            token, info = inbox.issue_token(email)
+            log.info("Inbox: issued a posting token for %s", email)
+            return jsonify({"ok": True, "token": token, "info": info}), 201
+        if request.method == "DELETE":
+            revoked = inbox.revoke_token(email)
+            return jsonify({"ok": True, "revoked": revoked})
+        return jsonify({"info": inbox.token_info(email)})
+    except inbox.StoreUnavailable as exc:
+        log.warning("Inbox: token store unavailable: %s", exc)
+        return jsonify({"error": "Store unavailable.",
+                        "reason": "store_unavailable"}), 503
+    except inbox.InboxError as exc:
+        return jsonify({"error": exc.detail or exc.reason, "reason": exc.reason}), 400
 
 
 @bp.route("/posts")

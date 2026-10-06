@@ -20,6 +20,11 @@ an open write door goes wrong:
 * **Silent loss.** A sender's unknown fields are kept, not dropped, and a
   message with nothing in it is refused rather than stored as an empty card —
   in both cases so the sender can tell what happened.
+
+And since 2026-10-06, a fifth: **one reader's posts reaching another.** Every
+post belongs to an address, the token decides which, and a read touches only
+that address's partitions. ``OwnerTests`` and ``PersonalTokenTests`` run the real
+key conditions against an in-memory table.
 """
 from __future__ import annotations
 
@@ -29,7 +34,66 @@ import unittest
 from email.message import EmailMessage
 from datetime import datetime, timezone
 
+from boto3.dynamodb.conditions import Equals
+
 from ystocker import inbox
+
+OWNER = "reader@example.com"
+
+
+class _Table:
+    """DynamoDB's semantics for the calls the inbox makes, keyed (bucket, sk)."""
+
+    def __init__(self) -> None:
+        self.items: dict[tuple[str, str], dict] = {}
+        self.fail = False
+
+    def _check(self):
+        if self.fail:
+            raise RuntimeError("stubbed outage")
+
+    def put_item(self, Item):
+        self._check()
+        self.items[(Item["bucket"], Item["sk"])] = dict(Item)
+
+    def get_item(self, Key, ConsistentRead=False):
+        self._check()
+        item = self.items.get((Key["bucket"], Key["sk"]))
+        return {"Item": dict(item)} if item else {}
+
+    def delete_item(self, Key):
+        self._check()
+        self.items.pop((Key["bucket"], Key["sk"]), None)
+        return {}
+
+    def query(self, KeyConditionExpression, ScanIndexForward=True, Limit=None):
+        self._check()
+        assert isinstance(KeyConditionExpression, Equals)
+        name, value = KeyConditionExpression.get_expression()["values"]
+        hits = sorted((i for i in self.items.values() if i.get(name.name) == value),
+                      key=lambda i: i["sk"], reverse=not ScanIndexForward)
+        return {"Items": [dict(i) for i in hits[:Limit]]}
+
+
+class _WithTable(unittest.TestCase):
+    def setUp(self):
+        self._saved = inbox._table
+        self.table = _Table()
+        inbox._table = self.table
+        self._env = {k: inbox.os.environ.get(k) for k in ("INBOX_TOKEN", "INBOX_OWNER")}
+        inbox.os.environ["INBOX_TOKEN"] = "site-token"
+        inbox.os.environ["INBOX_OWNER"] = "Owner@Example.com"
+
+    def tearDown(self):
+        inbox._table = self._saved
+        for k, v in self._env.items():
+            if v is None:
+                inbox.os.environ.pop(k, None)
+            else:
+                inbox.os.environ[k] = v
+
+    def post(self, owner, text, when):
+        inbox.put(inbox.normalise({"text": text}, owner=owner, now=when))
 
 
 class TokenTests(unittest.TestCase):
@@ -90,15 +154,26 @@ class NormaliseTests(unittest.TestCase):
     NOW = datetime(2026, 9, 21, 14, 30, 5, tzinfo=timezone.utc)
 
     def norm(self, body):
-        return inbox.normalise(body, now=self.NOW)
+        return inbox.normalise(body, owner=OWNER, now=self.NOW)
 
     def test_a_minimal_message_is_accepted(self):
         out = self.norm({"text": "hello"})
         self.assertEqual(out["text"], "hello")
         self.assertEqual(out["level"], "info")
-        self.assertEqual(out["bucket"], "2026-09")
+        self.assertEqual(out["bucket"], f"{OWNER}#2026-09")
+        self.assertEqual(out["owner"], OWNER)
         self.assertTrue(out["sk"].startswith("2026-09-21T14:30:05"))
         self.assertIn("#", out["sk"])
+
+    def test_the_owner_is_one_spelling_of_the_address(self):
+        out = inbox.normalise({"text": "x"}, owner=" Reader@Example.COM ", now=self.NOW)
+        self.assertEqual(out["owner"], OWNER)
+        self.assertEqual(out["bucket"], f"{OWNER}#2026-09")
+
+    def test_a_post_with_no_owner_is_refused(self):
+        with self.assertRaises(inbox.InboxError) as ctx:
+            inbox.normalise({"text": "x"}, owner="", now=self.NOW)
+        self.assertEqual(ctx.exception.reason, "no_owner")
 
     def test_a_message_with_neither_title_nor_text_is_refused(self):
         """An empty card on the page is indistinguishable from a bug in the
@@ -202,9 +277,9 @@ class NormaliseTests(unittest.TestCase):
     def test_the_sort_key_orders_by_time(self):
         """`recent` reads newest-first off this key, so lexical order has to
         match chronological order."""
-        early = inbox.normalise({"text": "a"},
+        early = inbox.normalise({"text": "a"}, owner=OWNER,
                                 now=datetime(2026, 9, 21, 1, 0, tzinfo=timezone.utc))
-        late = inbox.normalise({"text": "b"},
+        late = inbox.normalise({"text": "b"}, owner=OWNER,
                                now=datetime(2026, 9, 21, 23, 0, tzinfo=timezone.utc))
         self.assertLess(early["sk"], late["sk"])
 
@@ -332,7 +407,7 @@ class RawEmailTests(unittest.TestCase):
         part.add_related(b"z" * (inbox.MAX_INLINE_IMAGE_BYTES - 1),
                          maintype="image", subtype="png", cid="<b>")
         out = inbox.parse_email(msg.as_bytes())
-        after = inbox.normalise(out)["text"]
+        after = inbox.normalise(out, owner=OWNER)["text"]
         # Whole, not merely long: a clipped base64 payload is still ~128 KB of
         # plausible-looking characters, so length alone would not have caught it.
         # The closing tag proves the document survived past the URI.
@@ -352,7 +427,7 @@ class RawEmailTests(unittest.TestCase):
         `normalise`'s rule — duplicating it here would be two places to change."""
         out = inbox.parse_email(b"Subject: \r\n\r\n")
         with self.assertRaises(inbox.InboxError) as ctx:
-            inbox.normalise(out)
+            inbox.normalise(out, owner=OWNER)
         self.assertEqual(ctx.exception.reason, "empty")
 
     def test_unparsable_bytes_are_refused_with_a_reason(self):
@@ -394,6 +469,118 @@ class ThawTests(unittest.TestCase):
 
     def test_the_ttl_column_is_not_leaked_to_the_page(self):
         self.assertNotIn("expires_at", inbox._thaw({"id": "a", "expires_at": 1}))
+        self.assertNotIn("bucket", inbox._thaw({"id": "a", "bucket": f"{OWNER}#2026-09"}))
+
+
+SEPT = datetime(2026, 9, 21, 9, 0, tzinfo=timezone.utc)
+OCT = datetime(2026, 10, 6, 9, 0, tzinfo=timezone.utc)
+
+
+class OwnerTests(_WithTable):
+
+    def test_a_reader_sees_only_their_own_posts(self):
+        self.post(OWNER, "mine", OCT)
+        self.post("someone@example.com", "theirs", OCT)
+        mine = inbox.recent(OWNER, now=OCT)
+        self.assertEqual([r["text"] for r in mine], ["mine"])
+        self.assertEqual([r["text"] for r in inbox.recent("someone@example.com", now=OCT)],
+                         ["theirs"])
+        self.assertEqual(inbox.recent("nobody@example.com", now=OCT), [])
+
+    def test_the_read_walks_back_through_the_readers_own_months(self):
+        self.post(OWNER, "september", SEPT)
+        self.post(OWNER, "october", OCT)
+        self.assertEqual([r["text"] for r in inbox.recent(OWNER, now=OCT)],
+                         ["october", "september"])
+
+    def test_rows_from_before_owners_are_the_site_owners_alone(self):
+        """303 posts were stored under a bare month before posts had owners,
+        every one of them sent with the site owner's token."""
+        legacy = inbox.normalise({"text": "forwarded mail"}, owner=OWNER, now=SEPT)
+        legacy["bucket"] = "2026-09"
+        legacy.pop("owner")
+        inbox.put(legacy)
+        self.post("owner@example.com", "new", OCT)
+        self.post("owner@example.com", "also september", SEPT.replace(hour=12))
+        owner = [r["text"] for r in inbox.recent("owner@example.com", now=OCT)]
+        self.assertEqual(owner, ["new", "also september", "forwarded mail"])
+        self.assertEqual(inbox.recent(OWNER, now=OCT), [])
+
+    def test_the_limit_holds_across_the_merge(self):
+        for hour in range(6):
+            self.post("owner@example.com", f"post {hour}", SEPT.replace(hour=hour))
+        self.assertEqual(len(inbox.recent("owner@example.com", limit=4, now=OCT)), 4)
+
+    def test_a_store_outage_is_raised_not_read_as_no_posts(self):
+        self.table.fail = True
+        with self.assertRaises(inbox.StoreUnavailable):
+            inbox.recent(OWNER, now=OCT)
+
+
+class PersonalTokenTests(_WithTable):
+
+    def test_the_site_token_posts_for_the_site_owner(self):
+        self.assertEqual(inbox.site_owner(), "owner@example.com")
+        self.assertEqual(inbox.owner_for_token("site-token"), "owner@example.com")
+
+    def test_without_inbox_owner_the_site_token_is_the_owners(self):
+        from ystocker.quota import OWNER_EMAIL
+
+        inbox.os.environ.pop("INBOX_OWNER", None)
+        self.assertEqual(inbox.owner_for_token("site-token"), OWNER_EMAIL)
+
+    def test_a_personal_token_posts_for_its_holder(self):
+        token, info = inbox.issue_token(" Reader@Example.com ")
+        self.assertEqual(inbox.owner_for_token(token), OWNER)
+        self.assertEqual(info["hint"], token[-4:])
+        self.assertEqual(inbox.token_info(OWNER), info)
+
+    def test_only_the_hash_is_stored(self):
+        token, _ = inbox.issue_token(OWNER)
+        stored = json.dumps(list(self.table.items.values()))
+        self.assertNotIn(token, stored)
+
+    def test_a_new_token_revokes_the_old(self):
+        old, _ = inbox.issue_token(OWNER)
+        new, _ = inbox.issue_token(OWNER)
+        self.assertNotEqual(old, new)
+        self.assertIsNone(inbox.owner_for_token(old))
+        self.assertEqual(inbox.owner_for_token(new), OWNER)
+        self.assertEqual(sum(1 for b, _ in self.table.items if b == inbox.TOKEN_PARTITION), 1)
+
+    def test_revoking_stops_the_token(self):
+        token, _ = inbox.issue_token(OWNER)
+        self.assertTrue(inbox.revoke_token(OWNER))
+        self.assertIsNone(inbox.owner_for_token(token))
+        self.assertIsNone(inbox.token_info(OWNER))
+        self.assertFalse(inbox.revoke_token(OWNER))
+
+    def test_unknown_and_empty_tokens_are_nobodys(self):
+        self.assertIsNone(inbox.owner_for_token("not-a-token"))
+        self.assertIsNone(inbox.owner_for_token(""))
+        self.assertIsNone(inbox.owner_for_token(None))
+
+    def test_an_unset_site_token_matches_nothing(self):
+        """Unset never reads as unchecked, with personal tokens in the table too."""
+        inbox.os.environ.pop("INBOX_TOKEN", None)
+        self.assertIsNone(inbox.owner_for_token("site-token"))
+        token, _ = inbox.issue_token(OWNER)
+        self.assertEqual(inbox.owner_for_token(token), OWNER)
+
+    def test_a_lookup_outage_is_raised_not_read_as_a_bad_token(self):
+        """401 would tell a script its token was revoked."""
+        self.table.fail = True
+        with self.assertRaises(inbox.StoreUnavailable):
+            inbox.owner_for_token("not-the-site-token")
+
+    def test_tokens_live_apart_from_every_feed(self):
+        """No TTL on the token rows, and no feed partition can be one of them."""
+        inbox.issue_token(OWNER)
+        for (bucket, _), item in self.table.items.items():
+            self.assertIn(bucket, (inbox.TOKEN_PARTITION, inbox.OWNER_PARTITION))
+            self.assertNotIn("expires_at", item)
+        self.post(OWNER, "x", OCT)
+        self.assertEqual([r["text"] for r in inbox.recent(OWNER, now=OCT)], ["x"])
 
 
 class SourcesTests(unittest.TestCase):

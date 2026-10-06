@@ -92,12 +92,17 @@ def limit_global() -> int:
     return _int_env("AGENTS_GLOBAL_DAILY_LIMIT", 60)
 
 
+#: The site owner's address: the VIP default below, and whose feed
+#: ``INBOX_TOKEN`` posts to (``inbox.site_owner``).
+OWNER_EMAIL = "liyuanxi23@gmail.com"
+
+
 def vip_emails() -> set[str]:
     """VIP addresses. Configurable, with the owner as the built-in default so a
     missing SSM parameter cannot lock the owner down to the public limit."""
     raw = os.environ.get("AGENTS_VIP_EMAILS", "").strip()
     if not raw:
-        raw = "liyuanxi23@gmail.com"
+        raw = OWNER_EMAIL
     return {e.strip().lower() for e in _SPLIT_RE.split(raw) if "@" in e}
 
 

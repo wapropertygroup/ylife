@@ -1208,7 +1208,7 @@ Errors are *not* mailed — only finished reports. Tests:
 
 A write-only door for anything that can make an HTTP request — a cron job, a
 broker webhook, a script on another machine — and a signed-in feed that renders
-what came through it. `text` is rendered by the shared `static/markdown.js`, so
+what came through it, each reader's own (see "Every post has an owner" below). `text` is rendered by the shared `static/markdown.js`, so
 a sender can post Markdown **or** HTML: that renderer escapes text before adding
 any tag and rebuilds HTML against an allowlist rather than passing it through,
 which is what makes accepting HTML from a token holder safe at all.
@@ -1231,8 +1231,9 @@ unauthenticated write endpoint would be found and filled, not in theory.
 
 Four rules, none negotiable:
 
-- **No token configured means the door is shut, not open.** `INBOX_TOKEN` unset
-  returns 503 and stores nothing. Treating "unset" as "unchecked" is the single
+- **No token configured means the door is shut, not open.** An unset
+  `INBOX_TOKEN` matches nothing, so even its old value is a 401 and nothing is
+  stored. Until personal tokens it was a 503. Treating "unset" as "unchecked" is the single
   mistake that turns a missing SSM parameter into an open relay, and it fails in
   the direction where nothing looks wrong.
 - **The token check runs before the body is read.** An unauthenticated caller
@@ -1247,6 +1248,30 @@ Four rules, none negotiable:
   signed-in only, which decides what a leaked token *is*: a nuisance (somebody
   fills your inbox) rather than a publishing channel onto trade-agents.com in
   your name. Those are different incidents and the difference costs one check.
+
+**Every post has an owner, and a reader sees only their own** (2026-10-06,
+asked: "/posts should be per person per email"). Before that the feed was one
+list for every signed-in reader: 303 posts, 293 of them the owner's forwarded
+mail, readable by every account on trade-agents.com.
+- **The token decides whose post it is.** `INBOX_TOKEN` posts for
+  `inbox.site_owner()`: `INBOX_OWNER`, else `quota.OWNER_EMAIL`, the same
+  default the VIP list uses. Anyone else creates a personal token on `/posts`
+  (`/api/posts/token`: GET what exists, POST a new one, DELETE). That token
+  posts into its holder's feed and nobody else's, so a leaked one fills one
+  inbox, not every inbox.
+- **A personal token is shown once.** Only its SHA-256 is stored, in the same
+  table under `bucket = "_token"`, with `_owner` naming each address's current
+  one. Making a new token revokes the old. The writes run old-out, new-in,
+  pointer-last, so a failure part-way cannot leave a live token that nobody was
+  shown.
+- **A failed token lookup is a 503, not a 401**, since 401 tells a script its
+  token was revoked.
+- **Rows partition by owner**: `bucket = "<owner>#YYYY-MM"`, so a reader's Query
+  never reads another reader's rows. The 303 rows from before sit under a bare
+  `YYYY-MM`, and `recent()` merges those for the site owner only. They expire by
+  TTL by 2027-01-05, and then that branch can go.
+- **There is no VIP view of everyone's posts.** The endpoint is per person,
+  owner included.
 
 **A `cid:` image can only be resolved where the message is.** Post
 `Content-Type: message/rfc822` instead of JSON and the receiver does the MIME
@@ -1285,11 +1310,12 @@ accepted and dropped leaves the sender with no way to know and no reason to
 retry; a GET that answers "no messages" when it means "cannot reach the table"
 is the one wrong answer on the page whose job is to show them.
 
-Rate-limited on `quota.py`'s `flock`ed counter (`INBOX_DAILY_LIMIT`, 500/day),
-reusing that file's lock so two gunicorn workers cannot both read the same count
-and write the same increment.
+Rate-limited on `quota.py`'s `flock`ed counter (`INBOX_DAILY_LIMIT`, 500/day for
+everyone, `INBOX_USER_DAILY_LIMIT`, 200/day per address), reusing that file's
+lock so two gunicorn workers cannot both read the same count and write the same
+increment.
 
-Key schema is `bucket` (`YYYY-MM`) HASH + `sk` (`<iso8601>#<id>`) RANGE, so "the
+Key schema is `bucket` (`<owner>#YYYY-MM`) HASH + `sk` (`<iso8601>#<id>`) RANGE, so "the
 most recent fifty" is a Query with `ScanIndexForward=False` rather than a Scan —
 on `PAY_PER_REQUEST` a Scan is billed by volume scanned. Monthly buckets rather
 than one fixed partition so it cannot grow without bound; `recent()` walks back
@@ -1298,9 +1324,12 @@ while the previous month is full. TTL is on at `INBOX_RETENTION_DAYS` (90) —
 unlike the observed series in `dca_history`, these rows *can* be re-sent by
 whatever produced them, so keeping them for ever buys nothing.
 
-Tests: `tests/test_inbox.py` (28, no app/network/AWS — the fail-closed token,
-the caps, the refusals) and `tests/check_inbox_endpoints.py` (17 end-to-end,
-`check_` so `unittest discover` skips it).
+Tests: `tests/test_inbox.py` (57, no app/network/AWS — the fail-closed token,
+the caps, the refusals, and owners and personal tokens against an in-memory
+table that evaluates the real key conditions) and
+`tests/check_inbox_endpoints.py` (30 end-to-end, `check_` so `unittest discover`
+skips it: whose feed a post lands in, the token's whole life, the per-address
+ceiling).
 
 ```bash
 aws dynamodb create-table --table-name ystocker-inbox --region us-west-2 \

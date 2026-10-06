@@ -313,6 +313,28 @@
     <p class="text-xs text-slate-500 dark:text-slate-600" data-i18n="inbox.empty_hint">Post a message to get started — the example below works as-is once the token is set.</p>
   </div>
 
+  {# The reader's own posting token, which is what makes this feed theirs: a
+     post lands in the feed of whoever's token it carries. The token is shown
+     once, in the answer to the POST that made it, because only its hash is
+     stored. #}
+  <section id="ibToken" class="ib-card p-4 mt-6 text-sm">
+    <h2 class="font-medium text-slate-700 dark:text-slate-300 mb-1" data-i18n="inbox.token_title">Your posting token</h2>
+    <p class="text-xs text-slate-500 dark:text-slate-400 mb-3" data-i18n="inbox.token_body">Anything posted with it appears here, and only you can read it. One token per account: a new one replaces the old.</p>
+    <p id="ibTokenState" class="text-xs text-slate-600 dark:text-slate-400 mb-3"></p>
+    <div id="ibTokenFresh" class="hidden mb-3">
+      <p class="text-xs mb-1" style="color:#b45309" data-i18n="inbox.token_once">Copy it now. It is shown once and cannot be shown again.</p>
+      <div class="flex gap-2 items-start">
+        <pre id="ibTokenValue" class="ib-data" style="margin:0;flex:1;user-select:all"></pre>
+        <button type="button" id="ibTokenCopy" class="ib-filter" data-i18n="inbox.token_copy">Copy</button>
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <button type="button" id="ibTokenCreate" class="ib-filter" data-i18n="inbox.token_create">Create token</button>
+      <button type="button" id="ibTokenRevoke" class="ib-filter hidden" data-i18n="inbox.token_revoke">Revoke</button>
+    </div>
+    <p id="ibSiteToken" class="hidden text-xs text-slate-500 dark:text-slate-600 mt-3" data-i18n="inbox.site_token_note">Posts made with the site's INBOX_TOKEN land here too, since you own the site.</p>
+  </section>
+
   {# The usage note is on the page rather than in a README because the person
      wiring a sender up is the person reading this, and a curl line they can
      copy is the difference between "there is an endpoint" and using it. #}
@@ -703,12 +725,16 @@ function renderBoard(board, rows) {
   annotateRefused(board);
 }
 
+let _retention = null;
+let _freshToken = '';   // shown once, then only for as long as the page is open
+let _tokenInfo = null;
+
 function renderCurl(retention) {
   const el = document.getElementById('ibCurl');
   if (!el) return;
   el.textContent =
     `curl -X POST ${location.origin}/api/posts \\\n`
-    + `  -H 'Authorization: Bearer <INBOX_TOKEN>' \\\n`
+    + `  -H 'Authorization: Bearer ${_freshToken || '<YOUR_TOKEN>'}' \\\n`
     + `  -H 'Content-Type: application/json' \\\n`
     + `  -d '{"title":"Hello","text":"from my script",`
     + `"source":"cron","level":"info","ticker":"NVDA","tags":["test"]}'`;
@@ -734,9 +760,11 @@ async function loadInbox() {
       return;
     }
     _messages = body.messages || [];
+    _retention = body.retention_days;
     renderFilters();
     renderList();
-    renderCurl(body.retention_days);
+    renderCurl(_retention);
+    document.getElementById('ibSiteToken').classList.toggle('hidden', !body.site_token);
   } catch (e) {
     err.textContent = I18n.t('inbox.err_unknown') || 'Could not load the inbox.';
     err.classList.remove('hidden');
@@ -745,9 +773,79 @@ async function loadInbox() {
   }
 }
 
+/* The posting token. Every call answers a named refusal on failure, and a
+   store that cannot be reached changes nothing, so the message says exactly
+   that rather than leaving the reader to wonder whether a token was revoked. */
+function paintToken() {
+  const info = _tokenInfo;
+  const state = document.getElementById('ibTokenState');
+  state.textContent = info
+    ? (I18n.t('inbox.token_exists') || 'Token ending …{hint}, created {date}.')
+        .replace('{hint}', info.hint || '').replace('{date}', fmtWhen(info.created_at))
+    : (I18n.t('inbox.token_none') || 'You have no token yet.');
+  document.getElementById('ibTokenCreate').textContent =
+    I18n.t(info ? 'inbox.token_replace' : 'inbox.token_create')
+    || (info ? 'Replace token' : 'Create token');
+  document.getElementById('ibTokenRevoke').classList.toggle('hidden', !info);
+  document.getElementById('ibTokenFresh').classList.toggle('hidden', !_freshToken);
+  document.getElementById('ibTokenValue').textContent = _freshToken;
+}
+
+function tokenFailed() {
+  document.getElementById('ibTokenState').textContent =
+    I18n.t('inbox.token_err') || 'Could not reach the token store. Nothing was changed.';
+}
+
+async function loadToken() {
+  try {
+    const r = await fetch('/api/posts/token');
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) return tokenFailed();
+    _tokenInfo = body.info || null;
+    paintToken();
+  } catch (_) { tokenFailed(); }
+}
+
+document.getElementById('ibTokenCreate').addEventListener('click', async () => {
+  if (_tokenInfo && !window.confirm(I18n.t('inbox.token_replace_confirm')
+      || 'Replace your token? Scripts still using the old one will stop posting.')) return;
+  try {
+    const r = await fetch('/api/posts/token', { method: 'POST' });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || !body.token) return tokenFailed();
+    _freshToken = body.token;
+    _tokenInfo = body.info || null;
+    paintToken();
+    renderCurl(_retention);
+  } catch (_) { tokenFailed(); }
+});
+
+document.getElementById('ibTokenRevoke').addEventListener('click', async () => {
+  if (!window.confirm(I18n.t('inbox.token_revoke_confirm')
+      || 'Revoke your token? Scripts using it will stop posting.')) return;
+  try {
+    const r = await fetch('/api/posts/token', { method: 'DELETE' });
+    if (!r.ok) return tokenFailed();
+    _freshToken = '';
+    _tokenInfo = null;
+    paintToken();
+    renderCurl(_retention);
+  } catch (_) { tokenFailed(); }
+});
+
+document.getElementById('ibTokenCopy').addEventListener('click', async (ev) => {
+  const btn = ev.currentTarget;
+  try {
+    await navigator.clipboard.writeText(_freshToken);
+    btn.textContent = I18n.t('inbox.token_copied') || 'Copied';
+    setTimeout(() => { btn.textContent = I18n.t('inbox.token_copy') || 'Copy'; }, 2000);
+  } catch (_) { /* the token stays selectable in the box beside the button */ }
+});
+
 // The list is composed in JS, so I18n.apply() cannot reach it.
 document.addEventListener('i18n:langchange', () => {
   if (_messages.length) { renderFilters(); renderList(); }
+  paintToken();
 });
 
 document.querySelectorAll('[data-view]').forEach(btn =>
@@ -757,6 +855,7 @@ document.querySelectorAll('[data-view]').forEach(btn =>
 setView(_view);
 
 loadInbox();
+loadToken();
 </script>
 {% endif %}
 {% endblock %}
