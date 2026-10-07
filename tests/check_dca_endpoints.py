@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+import contextlib
 import types
 import unittest
 
@@ -47,6 +48,22 @@ os.environ.setdefault("YSTOCKER_SECRET_KEY", "check-dca-secret")
 # be able to edit somebody's actual holdings.
 os.environ["ASSETS_LOCAL_STORE"] = "1"
 
+# Hermetic, as CLAUDE.md asks of every check that calls create_app(): without
+# this the DynamoDB-backed stores and the app's threads run on this machine's
+# credentials, against production tables. So no AWS credentials, no .env (it
+# can carry them), no SSM, and none of the threads create_app() starts.
+for _k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+           "AWS_PROFILE", "AGENTS_ALLOWED_EMAILS"):
+    os.environ.pop(_k, None)
+os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.devnull
+os.environ["AWS_CONFIG_FILE"] = os.devnull
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+_dotenv = types.ModuleType("dotenv")
+_dotenv.load_dotenv = lambda *a, **k: False
+_dotenv.find_dotenv = lambda *a, **k: ""
+_dotenv.dotenv_values = lambda *a, **k: {}
+sys.modules["dotenv"] = _dotenv
+
 import time                                                       # noqa: E402
 import tempfile                                                   # noqa: E402
 from datetime import date, timedelta                              # noqa: E402
@@ -69,7 +86,21 @@ du.LOCAL_PATH = Path(_REG_DIR.name) / "dca_universe.json"
 du._table = None
 du._table_unavail_until = float("inf")
 
-from ystocker import create_app                                    # noqa: E402
+import threading                                                  # noqa: E402
+
+import ystocker                                                   # noqa: E402
+
+ystocker._load_secrets_from_ssm = lambda *a, **k: None
+
+
+def create_app():
+    """``ystocker.create_app`` with the threads it starts held back."""
+    real_start = threading.Thread.start
+    threading.Thread.start = lambda self: None
+    try:
+        return ystocker.create_app()
+    finally:
+        threading.Thread.start = real_start
 
 
 def _seed(ticker: str = "MSFT", *, listing_basis: dict | None = None,
@@ -261,6 +292,31 @@ class DcaEndpoints(unittest.TestCase):
         # costs the reader a name they wanted.
         self.assertIn("pinned", body["registry"])
         self.assertIn("max_pinned", body["registry"])
+
+    def test_a_standard_name_reads_as_kept(self):
+        """Asked 2026-10-07: the default names show 保留 on. They are never
+        dropped, which is all keeping means."""
+        body = self.client.get("/api/dca/MSFT").get_json()
+        self.assertTrue(body["seed"])
+        self.assertTrue(body["pinned"])
+        self.assertFalse(body["disliked"])
+        du.dislike("MSFT")
+        try:
+            body = self.client.get("/api/dca/MSFT").get_json()
+            self.assertTrue(body["disliked"])
+            self.assertFalse(body["pinned"], "a disliked name is not kept")
+        finally:
+            du.undislike("MSFT")
+
+    def test_opening_a_disliked_name_does_not_bring_it_back(self):
+        """The page still builds; the name stays off the table."""
+        _seed("SHOP")
+        du.dislike("SHOP")
+        try:
+            self.assertEqual(self.client.get("/api/dca/SHOP").status_code, 200)
+            self.assertNotIn("SHOP", du.all_tickers())
+        finally:
+            du.undislike("SHOP")
 
     # ── the page ──────────────────────────────────────────────────────────
     def test_page_renders_for_a_known_ticker(self):
@@ -499,6 +555,19 @@ class DcaOverview(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("DCA Valuation Engine", r.data.decode())
 
+    @staticmethod
+    @contextlib.contextmanager
+    def _vip(allowed=True):
+        """Grant (or withhold) the shared-list write permission for a block."""
+        import ystocker.routes as rt
+
+        original = rt._dca_pin_editable
+        rt._dca_pin_editable = lambda: allowed
+        try:
+            yield
+        finally:
+            rt._dca_pin_editable = original
+
     # ── holdings join the ranked universe permanently ─────────────────────
     #
     # The names a reader has money in are the ones most worth the six reads a
@@ -732,19 +801,119 @@ class DcaOverview(unittest.TestCase):
     def test_untracking_removes_a_name(self):
         du.remember("SHOP")
         try:
-            r = self.client.delete("/api/dca/track/SHOP")
+            with self._vip():
+                r = self.client.delete("/api/dca/track/SHOP")
             self.assertEqual(r.status_code, 200)
             self.assertTrue(r.get_json()["removed"])
             self.assertNotIn("SHOP", du.all_tickers())
         finally:
             du.forget("SHOP")
 
+    def test_untracking_is_refused_without_permission(self):
+        """Until 2026-10-07 any visitor could delete names, pinned ones
+        included, from the list everyone sees."""
+        du.remember("SHOP")
+        try:
+            r = self.client.delete("/api/dca/track/SHOP")
+            self.assertEqual(r.status_code, 403)
+            self.assertIn("SHOP", du.all_tickers())
+        finally:
+            du.forget("SHOP")
+
     def test_a_seed_name_cannot_be_untracked(self):
         """It would reappear on the next sweep, which reads as a bug."""
-        r = self.client.delete("/api/dca/track/MSFT")
+        with self._vip():
+            r = self.client.delete("/api/dca/track/MSFT")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.get_json()["reason"], "seed")
         self.assertIn("MSFT", du.all_tickers())
+
+    # ── dislike: off the table and out of the daily scan ──────────────────
+    def test_disliking_is_refused_without_permission(self):
+        r = self.client.post("/api/dca/dislike/MSFT")
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("MSFT", du.all_tickers())
+        body = self.client.get("/api/dca").get_json()
+        self.assertFalse(body["editable"])
+        self.assertEqual(body["disliked"], [])
+
+    def test_a_disliked_name_leaves_the_table_and_the_scan(self):
+        try:
+            with self._vip():
+                r = self.client.post("/api/dca/dislike/MSFT")
+                self.assertEqual(r.status_code, 200)
+                self.assertTrue(r.get_json()["disliked"])
+                body = self.client.get("/api/dca").get_json()
+            self.assertNotIn("MSFT", [x["ticker"] for x in body["rows"]])
+            self.assertNotIn("MSFT", body["pending"])
+            self.assertNotIn("MSFT", du.all_tickers(), "the daily sweep reads this list")
+            self.assertEqual(body["disliked"], ["MSFT"])
+            self.assertTrue(body["editable"])
+            # Only someone who may restore it is told what was disliked.
+            self.assertEqual(self.client.get("/api/dca").get_json()["disliked"], [])
+            with self._vip():
+                self.assertEqual(self.client.delete("/api/dca/dislike/MSFT").status_code, 200)
+            self.assertIn("MSFT", [x["ticker"] for x in self.client.get("/api/dca").get_json()["rows"]])
+        finally:
+            du.undislike("MSFT")
+
+    def test_restoring_a_scored_name_puts_it_back_at_once(self):
+        """Outside the standard set a name rejoins by scoring; one with a score
+        on disk need not wait for somebody to open it."""
+        _seed("SHOP")
+        du.remember("SHOP")
+        try:
+            with self._vip():
+                self.client.post("/api/dca/dislike/SHOP")
+                self.assertNotIn("SHOP", du.all_tickers())
+                self.client.delete("/api/dca/dislike/SHOP")
+            self.assertIn("SHOP", du.all_tickers())
+        finally:
+            du.undislike("SHOP")
+            du.forget("SHOP")
+
+    def test_a_disliked_holding_stays_off_the_table(self):
+        _seed("OWNED")
+        du.remember("OWNED")
+        try:
+            du.dislike("OWNED")
+            body = self._with_holdings(["OWNED"])
+            self.assertNotIn("OWNED", [x["ticker"] for x in body["rows"]])
+            self.assertNotIn("OWNED", body["pending"])
+        finally:
+            du.undislike("OWNED")
+            du.forget("OWNED")
+
+    def test_a_junk_symbol_is_refused(self):
+        with self._vip():
+            r = self.client.post("/api/dca/dislike/NOT$A$TICKER")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["reason"], "invalid")
+        self.assertNotIn("NOT$A$TICKER", du.tracked())
+
+    # ── only a valid V is a row ───────────────────────────────────────────
+    def test_no_row_is_drawn_without_a_valid_v(self):
+        """Asked 2026-10-07: "don't display anything without valid V". A name
+        that is built but cannot be scored is counted, not listed."""
+        thin = _seed("THIN")
+        thin["series"] = {"pe": thin["series"]["pe"]}
+        thin["percentiles"] = {"pe": 55.0}
+        dh._mem["THIN"] = (thin["_ts"], thin)
+        du.remember("THIN")
+        original = dh.peer_percentiles
+        dh.peer_percentiles = lambda t, recs=None: {"percentile": None, "group": None,
+                                                    "reason": "no_group"}
+        try:
+            body = self.client.get("/api/dca").get_json()
+            self.assertNotIn("THIN", [x["ticker"] for x in body["rows"]])
+            self.assertIn("THIN", body["unscored"])
+            self.assertTrue(body["rows"], "the scored names are still there")
+            self.assertTrue(all(isinstance(x["V"], (int, float)) for x in body["rows"]))
+            self.assertEqual(body["scored"], len(body["rows"]))
+        finally:
+            dh.peer_percentiles = original
+            du.forget("THIN")
+            dh._mem.pop("THIN", None)
 
     def test_the_list_reports_registry_capacity(self):
         reg = self.client.get("/api/dca").get_json()["registry"]

@@ -36,12 +36,10 @@ function extract(name) {
 // simpler and is worse: it sends every lookup down the English fallback branch,
 // so the *keys* are never exercised and a typo'd or collapsed key — the exact
 // bug that would ship an untranslated or wrong string to the Chinese page —
-// passes the check. Verified: with a null stub, rewriting `dcx.why_ + reason`
-// to a single constant key was not caught.
+// passes the check. Verified on the no-score tag this page used to draw: with a
+// null stub, rewriting `dcx.why_ + reason` to a single constant key was not
+// caught.
 const STRINGS = {
-  'dcx.why_young': 'history too short',
-  'dcx.why_no_peer_group': 'no peer group',
-  'dcx.why_factors': 'too few factors',
   'dcx.filings': 'filings',
   'dcx.years_unit': 'y',
   'dcx.dropped': 'dropped',
@@ -57,10 +55,10 @@ const I18n = { t: (k) => { asked.push(k); return STRINGS[k] ?? null; } };
 const esc = (s) => String(s ?? '');
 const label = (prefix, key) => `${prefix}${key ?? 'unknown'}`;
 
-const src = ['overlayCell', 'noScoreTag', 'coverageCell'].map(extract).join('\n');
-const { overlayCell, noScoreTag, coverageCell } = new Function(
+const src = ['overlayCell', 'coverageCell'].map(extract).join('\n');
+const { overlayCell, coverageCell } = new Function(
   'I18n', 'esc', 'label',
-  `${src}; return { overlayCell, noScoreTag, coverageCell };`
+  `${src}; return { overlayCell, coverageCell };`
 )(I18n, esc, label);
 
 let failed = 0;
@@ -98,34 +96,12 @@ console.log('overlayCell');
   check('suppressed variant still shows the multiplier', suppressed.includes('1.00×'));
 }
 
-console.log('noScoreTag');
+/* No row without a valid V is drawn (2026-10-07), so the tag that said why a
+   row had none went with it. The reasons still show on the detail page's peer
+   panel, which has its own checks. */
+console.log('no-score tag gone; coverage strings by key');
 {
-  check('a scored row gets no tag', noScoreTag({ no_score_reason: null }) === '');
-  const young = noScoreTag({ no_score_reason: 'young' });
-  const factors = noScoreTag({ no_score_reason: 'factors' });
-  check('"not yet" and "cannot" produce different text', young !== factors);
-  check('young says history is short', /history too short/.test(young));
-  check('factors says factors', /too few factors/.test(factors));
-  check('no peer group is its own reason',
-        /no peer group/.test(noScoreTag({ no_score_reason: 'no_peer_group' })));
-  // The server owns this decision; the page must not re-derive it from `years`,
-  // or the row and the detail page would eventually disagree.
-  check('an unrecognised reason renders nothing rather than guessing',
-        noScoreTag({ no_score_reason: 'something_new' }).includes('></div>'));
-
-  // Assert the *key*, not just the rendered text. Every one of these strings has
-  // an English fallback in the template, so a wrong or collapsed i18n key still
-  // renders correct-looking English — and ships that English to the Chinese
-  // page, which is the bug. Only checking which key was requested catches it.
-  asked.length = 0;
-  noScoreTag({ no_score_reason: 'young' });
-  check('looks up the per-reason key', asked.includes('dcx.why_young'),
-        `asked for ${JSON.stringify(asked)}`);
-  asked.length = 0;
-  noScoreTag({ no_score_reason: 'factors' });
-  check('a different reason looks up a different key', asked.includes('dcx.why_factors'),
-        `asked for ${JSON.stringify(asked)}`);
-
+  check('the overview no longer carries a no-score tag', !tpl.includes('function noScoreTag'));
   asked.length = 0;
   coverageCell({ years: 3.5, vintages: 9, dropped: ['pe'] });
   check('the year unit is translated, not a hardcoded "y"',
@@ -258,7 +234,7 @@ console.log('\nV below 60 folded');
   check('the threshold is 60', below === 60);
   const fold = new Function('I18n', 'esc',
     `const FOLD_BELOW_V = ${below};
-     ${['folded', 'foldRow', 'foldNote', 'tableBody'].map(extract).join('\n')}
+     ${['folded', 'foldRow', 'foldNote', 'tableBody', 'hasV'].map(extract).join('\n')}
      return { folded, foldRow, foldNote, tableBody };`)(I18n, esc);
   check('V 59.4 is folded', fold.folded({ V: 59.4 }));
   check('a 59.6 that reads "60" stays open', !fold.folded({ V: 59.6 }));
@@ -274,15 +250,19 @@ console.log('\nV below 60 folded');
   const byV = (a, b) => (a.V == null) - (b.V == null) || (b.V ?? 0) - (a.V ?? 0);
   const cell = (r) => `[${r.ticker}]`;
   const closed = fold.tableBody(rows, false, byV, cell);
-  check('folded: the open names, the fold, then the unscored',
-        /^\[TOP\]\[MID\]<tr class="fold-row">.*<\/tr>\[NONE\]$/.test(closed));
+  check('folded: the open names, then the fold, and no row for a name with no V',
+        /^\[TOP\]\[MID\]<tr class="fold-row">.*<\/tr>$/.test(closed) && !closed.includes('[NONE]'));
   check('folded: nothing below 60 is drawn',
         !closed.includes('[LOW]') && !closed.includes('[DEAR]'));
   check('the fold counts what it holds and says it is closed',
         closed.includes('2 more with V below 60') && closed.includes('aria-expanded="false"'));
   const open = fold.tableBody(rows, true, byV, cell);
-  check('unfolded: the folded names follow the fold, in order, before the unscored',
-        open.startsWith('[TOP][MID]<tr') && /<\/tr>\[LOW\]\[DEAR\]\[NONE\]$/.test(open));
+  check('unfolded: the folded names follow the fold, in order, and still no row with no V',
+        open.startsWith('[TOP][MID]<tr') && /<\/tr>\[LOW\]\[DEAR\]$/.test(open)
+          && !open.includes('[NONE]'));
+  check('a V that is not a finite number is no V either',
+        fold.tableBody([{ ticker: 'NAN', V: NaN }, { ticker: 'STR', V: '70' },
+                        { ticker: 'INF', V: Infinity }, { ticker: 'OK', V: 65 }], true, byV, cell) === '[OK]');
   check('unfolded: the fold offers to close again',
         open.includes('Fold the 2 with V below 60') && open.includes('aria-expanded="true"'));
   check('with nothing below 60 there is no fold row',

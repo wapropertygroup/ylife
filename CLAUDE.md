@@ -957,23 +957,28 @@ shipped that was 25 of 60 names. One full-width row in the table, "29 more with
 V below 60", unfolds the rest in place, and the "dearest" card offers the same
 toggle.
 - **Display, not data.** The cut is on V as displayed, so a 59.6 that reads
-  "60" stays open. A V of null is not "below 60": unscored names stay open, and
-  last.
-- **Where folded names go.** The table body is three runs, each in the chosen
-  sort: the open names, the fold and what it holds, then the unscored.
+  "60" stays open.
+- **Where folded names go.** The table body is two runs, each in the chosen
+  sort: the open names, then the fold and what it holds.
 - **The total.** While folded, the period total covers only the names shown,
   and says how many ("Total this period, 25 shown").
 - **The "dearest" card.** It folds too. It lists names below 60 by nature, and
   computed over the open names it would call a 61 "dearest".
 
-`node tests/check_dca_row_cells.mjs` pins the threshold, the three runs and the
+`node tests/check_dca_row_cells.mjs` pins the threshold, the two runs and the
 strings, all read from the template.
 
-The table sorts cheapest-first and an **unscorable row sorts last, not as V=0**:
-"could not be measured" is not "at its most expensive ever", and putting it at
-the top of a column headed cheapest would be a plain lie. The page also states
-what V is not — a cross-company ranking. Each row is scored on its own model,
-and a 70 means "cheap for this company", not "cheaper than the row above".
+**Only a name with a valid V is drawn** (asked 2026-10-07: "don't display
+anything without valid V"). Before that, an unscorable row sorted last rather
+than as V=0, carrying why it had none. Now `/api/dca` leaves it out of `rows`
+and lists it in `unscored`; the page drops one anyway, and the rebuilding note
+counts the pending names instead of naming them. The coverage line, scored
+against universe, still says how much is missing. On the day it shipped that
+hid six of 57 (ALAB, INTC, LITE, NBIS, SNDK, WGS). They stay registered and
+swept, and return once they score. The table sorts cheapest-first. The page
+also states what V is not — a cross-company ranking. Each row is scored on its
+own model, and a 70 means "cheap for this company", not "cheaper than the row
+above".
 
 **Every rebuild draws on one global budget** (`MAX_INFLIGHT_BUILDS`,
 `BUILD_MIN_GAP_SECONDS`), shared by the on-demand path and the sweep. The
@@ -1021,6 +1026,34 @@ Three things hold it together:
 
 A seed name cannot be untracked (`/api/dca/track/<ticker>` returns 400): it
 would reappear on the next sweep, which reads as a bug rather than a policy.
+
+**Keep (保留) and dislike (不喜欢) are the list's two writes**, both VIP-gated
+(`quota.is_vip`), because the registry is one list every visitor sees. Untrack
+joined them on 2026-10-07: until then any visitor, signed in or not, could
+delete names from it, kept ones included. On the overview the ✕ became 👎.
+- **Keep** pins a name against eviction. A seed name now reads as kept on its
+  page (asked the same day), since it is never dropped; its button explains
+  rather than toggles.
+- **Dislike** (`/api/dca/dislike/<ticker>`, POST/DELETE, asked 2026-10-07:
+  "exclude it from the dashboard and scan") takes a name off the table and out
+  of the daily rebuild, seed names included. It is a row marked `disliked`,
+  not a deletion: absence is what a new name looks like, so the next person to
+  open it would register it again. `remember()` and `sync_held()` leave such a
+  row alone, eviction never counts or drops it, and a disliked seed name gives
+  its slot back to the pool.
+- **Restoring** deletes the row. A seed name is back at once; any other rejoins
+  by scoring, which the route does on the spot if a score is on disk.
+- **The list of dislikes** sits under the overview's table, each with ↺, and
+  goes only to whoever may restore one. `MAX_DISLIKED` (200) bounds it, since
+  every registry read is a Scan.
+- **What is not touched.** The free daily banking of forward multiples
+  (`snapshot_universe`) reads the ticker cache rather than this list, and a
+  missed day cannot be backfilled.
+
+`remember()` now writes a row only if it survives its own eviction. Before
+that, with every non-seed slot kept, the new row was evicted and deleted from
+the table and then written straight back. The disk mirror lacked it, but the
+next read unions the two, so it returned one over the cap.
 
 Note the key schema differs from `ystocker-dca-history` on purpose. This table
 is one short row per tracked ticker and bounded by `MAX_TRACKED`, so listing it
@@ -1123,8 +1156,9 @@ zero-growth perpetuity identity that pins the discounting),
 a WACC that could never score, bands refused rather than clamped),
 `tests/test_dca_history.py` (74, the look-ahead guards, the TTM sum, the
 year-ago growth window, the build budget, the capex sign trap and the
-annual-only DCF series), `tests/test_dca_universe.py` (24, the cap and what it
-evicts), `tests/check_dca_endpoints.py` (94 end-to-end, `check_` so
+annual-only DCF series), `tests/test_dca_universe.py` (62, the cap and what it
+evicts, and dislikes that stick), `tests/check_dca_endpoints.py` (110
+end-to-end, hermetic since 2026-10-07, `check_` so
 `unittest discover` skips it — it needs an app and stubs matplotlib), and
 `node tests/check_dca_peers_panel.mjs` (15, no browser — it extracts
 `renderPeers` from the template rather than copying it, since a copy agrees on
@@ -3714,7 +3748,7 @@ Started in `create_app()`, all daemon threads:
   and config files pointed at /dev/null), stub SSM, and no-op `Thread.start`
   around `create_app()`, as `check_research_endpoints.py` does.
   `check_inbox_endpoints.py` and `check_assets_endpoints.py` did none of that
-  until 2026-10-04. Clear `AGENTS_ALLOWED_EMAILS` too: this shell sets it, and a
+  until 2026-10-04, nor `check_dca_endpoints.py` until 2026-10-07. Clear `AGENTS_ALLOWED_EMAILS` too: this shell sets it, and a
   page rendered with it shows "not allowed" instead of the run form.
 - **`tests/test_report_email.py` puts a stub at `sys.modules["ystocker.agents"]`**
   when `unittest discover` imports it, so code those tests reach after it sees

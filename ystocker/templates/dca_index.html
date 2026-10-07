@@ -44,6 +44,20 @@
     color: inherit; text-decoration: underline; cursor: pointer;
   }
   .fold-link:hover { text-decoration: none; }
+  /* Dislike and restore (VIP only). Built in JS like the fold, so styled here.
+     The emoji keeps its own colour, so it is dimmed rather than recoloured. */
+  .dislike-btn {
+    padding: 2px 4px; border: 0; background: none; cursor: pointer;
+    font-size: 13px; line-height: 1; opacity: .45; filter: grayscale(1);
+  }
+  .dislike-btn:hover, .dislike-btn:focus-visible { opacity: 1; filter: none; }
+  #dislikedNote { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--t-ink-dim); }
+  #dislikedNote[hidden] { display: none; }
+  .restore-btn {
+    padding: 2px 8px; border-radius: 999px; cursor: pointer; font: 600 11px/1.6 ui-monospace, monospace;
+    border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted);
+  }
+  .restore-btn:hover, .restore-btn:focus-visible { color: var(--t-ink); border-color: var(--t-line-hover); }
   /* Search. Positioned relative so the suggestion list can hang off it — note
      the card must NOT be a .fade-up: `animation: … both` makes every card a
      permanent stacking context, and an absolutely-positioned dropdown inside
@@ -152,12 +166,15 @@
           <th class="pb-2 px-2.5 sortable text-right" data-sort="m_portfolio" data-i18n="dcx.col_mport">M_port</th>
           <th class="pb-2 px-2.5 sortable text-right" data-sort="amount" data-i18n="dcx.col_amount">Contribution</th>
           <th class="pb-2 px-2.5" data-i18n="dcx.col_window">Window</th>
-          <th class="pb-2 px-2.5"><span class="sr-only" data-i18n="dcx.col_remove">Remove</span></th>
+          <th class="pb-2 px-2.5"><span class="sr-only" data-i18n="dcx.col_dislike">Dislike</span></th>
         </tr>
       </thead>
       <tbody id="rankBody"></tbody>
     </table>
   </div>
+  <!-- What has been disliked, each with a way back. Drawn only for a visitor
+       who may change the shared list; filled by render(). -->
+  <div id="dislikedNote" hidden></div>
   {# data-i18n-html, not data-i18n: this string carries an <em>, and the plain
      variant sets textContent so the tag would render as literal markup. Safe
      here because the value is our own translation, never user input. #}
@@ -179,8 +196,8 @@ let _allPortfolioUnknown = false;
    2026-10-04 rule that left V ≤ 20 off the page: the table opens on the names
    cheap enough to speed contributions up (V 60 is M_val 1.10×), and one toggle
    unfolds the rest in place. V is compared as it is shown, so a 59.6 that reads
-   "60" stays open. A name that could not be scored (V null) is not "below 60":
-   it stays open, last, as it always sorts.
+   "60" stays open. A name with no valid V is not drawn at all (2026-10-07), so
+   nothing here has to place one.
 
    While folded, the folded names are off the period total, which then says how
    many names it covers, and off both cards. The "dearest" card lists names below
@@ -205,15 +222,18 @@ function foldNote(n) {
     + `<button type="button" class="fold-link" data-fold-toggle>${
     esc(I18n.t('dcx.fold_open') || 'Show them')}</button></p>`;
 }
-/* The table body in three runs, each in the chosen order: the open names, the
-   fold and (unfolded) what it holds, then the names that could not be scored. */
+/* The table body in two runs, each in the chosen order: the open names, then
+   the fold and (unfolded) what it holds. A row with no valid V is dropped here
+   too, so the page cannot draw one whatever the server sends. */
 function tableBody(all, unfolded, cmp, rowHtml) {
-  const open = all.filter(r => r.V != null && !folded(r)).sort(cmp);
-  const low = all.filter(folded).sort(cmp);
-  const unscored = all.filter(r => r.V == null).sort(cmp);
+  const valid = all.filter(hasV);
+  const open = valid.filter(r => !folded(r)).sort(cmp);
+  const low = valid.filter(folded).sort(cmp);
   return open.map(rowHtml).join('')
-    + (low.length ? foldRow(low.length, unfolded) + (unfolded ? low.map(rowHtml).join('') : '') : '')
-    + unscored.map(rowHtml).join('');
+    + (low.length ? foldRow(low.length, unfolded) + (unfolded ? low.map(rowHtml).join('') : '') : '');
+}
+function hasV(r) {
+  return typeof r.V === 'number' && isFinite(r.V);
 }
 const noneYet = () =>
   `<p class="text-xs text-slate-500">${esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</p>`;
@@ -282,22 +302,6 @@ function overlayCell(value, band, prefix, suppress) {
     + value.toFixed(2) + '×' + note + '</td>';
 }
 
-/* Why a row has no V.
-
-   A bare em dash said only "no score" and left two different futures looking
-   the same: EquipmentShare has 0.7 years of history and will score by itself
-   once it has enough, while Lumentum has three years and cannot assemble half
-   its template's weight no matter how long it waits. The server decides which
-   (`no_score_reason`) — the page must not re-derive it from `years`, or the two
-   would drift. */
-function noScoreTag(r) {
-  if (!r.no_score_reason) return '';
-  const txt = I18n.t('dcx.why_' + r.no_score_reason)
-    || {young: 'history too short', no_peer_group: 'no peer group', factors: 'too few factors'}[r.no_score_reason]
-    || '';
-  return `<div class="text-[10px] text-amber-600 dark:text-amber-500">${esc(txt)}</div>`;
-}
-
 /* History length, vintage count, and which factors were dropped.
 
    The dropped list used to be a `−N` chip whose contents were a tooltip, so on a
@@ -348,7 +352,7 @@ function rankRow(r) {
           <span class="pct-track w-14"><span class="pct-fill" style="width:${r.V == null ? 0 : r.V}%;background:${vColor(r.V)}"></span></span>
           <span class="font-mono w-8 text-right" style="color:${vColor(r.V)}">${r.V == null ? '—' : r.V.toFixed(0)}</span>
         </div>
-        ${r.V == null ? noScoreTag(r) : dcfTag(r)}
+        ${dcfTag(r)}
       </td>
       <td class="text-xs" style="color:${vColor(r.V)}">${esc(r.band ? label('dca.band_', r.band) : '—')}</td>
       <td class="text-right font-mono">${r.m_valuation == null ? '—' : r.m_valuation.toFixed(2) + '×'}</td>
@@ -357,10 +361,11 @@ function rankRow(r) {
       <td class="text-right font-mono font-semibold">${fmtMoney(r.amount)}${
         r.capped ? ' <span class="chip" title="' + esc(I18n.t('dca.capped') || 'Capped') + '">⌃</span>' : ''}</td>
       <td class="text-[11px] text-slate-500">${coverageCell(r, (_data || {}).min_observations)}</td>
-      <td class="text-right">${r.seed ? '' :
-        `<button type="button" class="untrack text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition px-1"
-                 data-ticker="${esc(r.ticker)}"
-                 title="${esc(I18n.t('dcx.untrack_tip') || 'Stop tracking this name')}">✕</button>`}</td>
+      <td class="text-right">${(_data || {}).editable
+        ? `<button type="button" class="dislike-btn" data-dislike="${esc(r.ticker)}"
+                   title="${esc(I18n.t('dcx.dislike_tip') || 'Dislike: take this name off the table and out of the daily scan')}"
+                   aria-label="${esc((I18n.t('dcx.col_dislike') || 'Dislike') + ' ' + r.ticker)}">👎</button>`
+        : ''}</td>
     </tr>`;
 }
 
@@ -375,13 +380,25 @@ function render() {
 
   const warn = document.getElementById('warmNote');
   if (d.pending && d.pending.length) {
-    warn.textContent = '⏳ ' + (I18n.t('dcx.pending_pre') || 'Still rebuilding:') + ' ' +
-      d.pending.join(', ') + '. ' +
+    // A count, not the names: a name with no V yet is not shown anywhere.
+    warn.textContent = '⏳ ' + (I18n.t('dcx.pending_count') ||
+      '{n} names are still rebuilding and appear once they have a V.').replace('{n}', d.pending.length) + ' ' +
       (I18n.t('dcx.pending_note') || 'Each name is six filings reads, paced to stay well inside Yahoo’s limits — this page fills itself over a few minutes.');
     warn.classList.remove('hidden');
   } else {
     warn.classList.add('hidden');
   }
+
+  const gone = (d.editable && d.disliked) || [];
+  const note = document.getElementById('dislikedNote');
+  note.hidden = !gone.length;
+  note.innerHTML = gone.length
+    ? `<span>👎 ${esc((I18n.t('dcx.disliked_head') || 'Disliked ({n}), off the table and the daily scan:')
+        .replace('{n}', gone.length))}</span>`
+      + gone.map(t => `<button type="button" class="restore-btn" data-restore="${esc(t)}"`
+        + ` title="${esc(I18n.t('dcx.restore_tip') || 'Restore: back to the table and the daily scan')}">`
+        + `${esc(t)} ↺</button>`).join('')
+    : '';
 
   const below = _rows.filter(folded);
   const hiding = !_unfolded && below.length > 0;
@@ -432,10 +449,6 @@ function render() {
   document.getElementById('rankBody').innerHTML = tableBody(_rows, _unfolded, byKey, rankRow) ||
     `<tr><td colspan="10" class="text-xs text-slate-500 py-6 text-center">${
       esc(I18n.t('dcx.none_yet') || 'Nothing scored yet.')}</td></tr>`;
-
-  document.querySelectorAll('#rankBody .untrack').forEach(btn => {
-    btn.addEventListener('click', () => untrack(btn.dataset.ticker));
-  });
 }
 
 document.addEventListener('click', e => {
@@ -451,16 +464,41 @@ document.addEventListener('click', e => {
   }
 });
 
-async function untrack(ticker) {
+/* 👎 on a row, ↺ in the disliked list. One listener for both, since render()
+   rebuilds the buttons. */
+document.addEventListener('click', e => {
+  const no = e.target.closest('[data-dislike]');
+  if (no) { dislike(no.dataset.dislike, false); return; }
+  const back = e.target.closest('[data-restore]');
+  if (back) dislike(back.dataset.restore, true);
+});
+
+async function dislike(ticker, restore) {
   if (!ticker) return;
+  let r = null, body = {};
   try {
-    const r = await fetch('/api/dca/track/' + encodeURIComponent(ticker), { method: 'DELETE' });
-    if (!r.ok) return;
-  } catch (_) { return; }
-  // Drop it locally rather than refetching: the row is gone either way, and a
-  // full reload would re-run every score for one deletion.
+    r = await fetch('/api/dca/dislike/' + encodeURIComponent(ticker),
+                    { method: restore ? 'DELETE' : 'POST' });
+    body = await r.json().catch(() => ({}));
+  } catch (_) { /* reported below */ }
+  if (!r || !r.ok) {
+    alert((I18n.t('dcx.dislike_err_' + (body.reason || 'unknown'))
+           || I18n.t('dcx.dislike_err_unknown') || 'Could not save.')
+      .replace('{max}', body.max_disliked == null ? '?' : body.max_disliked));
+    return;
+  }
+  // A restored name may need its row scored by the server, so ask again.
+  if (restore) { load(); return; }
+  // Disliking only removes. Drop the row here rather than refetching, which
+  // would re-run every score for one change.
   _rows = _rows.filter(x => x.ticker !== ticker);
-  if (_data) { _data.rows = _rows; _data.scored = _rows.length; }
+  if (_data) {
+    _data.rows = _rows;
+    _data.scored = _rows.length;
+    _data.universe = Math.max(_rows.length, (_data.universe || 0) - 1);
+    _data.disliked = [...new Set([...(_data.disliked || []), ticker])].sort();
+    if (body.registry) _data.registry = body.registry;
+  }
   render();
 }
 
@@ -480,7 +518,7 @@ async function load(poll) {
     return;
   }
   _data = d;
-  _rows = d.rows || [];
+  _rows = (d.rows || []).filter(hasV);
   render();
   I18n.apply(document.getElementById('rankBody'));
 

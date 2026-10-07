@@ -50,6 +50,16 @@ series, never on the search itself. Yahoo publishes no statements for an ETF, so
 put rows in a table headed "all scored names" that can never carry a score,
 while still costing six reads a day each to re-confirm it. Observed on the first
 afternoon: ten of the twenty names opened were exactly this shape.
+
+A dislike is a row, not a deletion
+----------------------------------
+Disliking a name (asked for 2026-10-07: "exclude it from the dashboard and
+scan") takes it off the ranked table and out of the daily sweep, and keeps it
+out. Deleting its row could not do that: absence is what a new name looks like,
+so the next person to open it would register it again. So the row stays, marked
+:data:`DISLIKED`, and the marker works on the seed too, where nothing else can
+reach. A disliked row is never rebuilt, so it counts against neither the cap nor
+the seed's share of it.
 """
 from __future__ import annotations
 
@@ -68,6 +78,7 @@ __all__ = [
     "TABLE_NAME", "MAX_TRACKED", "PINNED", "seed", "tracked", "all_tickers",
     "remember", "forget", "touch", "stats", "pin", "unpin", "pinned",
     "HELD", "held", "sync_held",
+    "DISLIKED", "MAX_DISLIKED", "disliked", "dislike", "undislike",
 ]
 
 TABLE_NAME = os.environ.get("DCA_UNIVERSE_TABLE", "ystocker-dca-universe").strip()
@@ -107,6 +118,16 @@ PINNED = "pinned"
 #: set would only ever grow and would end up pinning a portfolio from months ago
 #: against the cap.
 HELD = "held"
+
+#: ``source`` marking a name taken off the ranked table and out of the daily
+#: sweep. Outranks every other marker: disliking a pinned or held name drops it
+#: all the same, and :func:`sync_held` will not re-mark it. See "A dislike is a
+#: row, not a deletion" above.
+DISLIKED = "disliked"
+
+#: Ceiling on disliked rows. They cost no Yahoo reads, but every read of the
+#: registry is a Scan of the whole table, so they are bounded like the rest.
+MAX_DISLIKED = int(os.environ.get("DCA_MAX_DISLIKED", "200"))
 
 #: Disk mirror. Small, rewritten whole, atomic — it is a set of short strings.
 LOCAL_PATH = Path(__file__).parent.parent / "cache" / "dca_universe.json"
@@ -257,17 +278,30 @@ def tracked() -> dict[str, dict[str, Any]]:
     return merged
 
 
+def _disliked_in(rows: Mapping[str, Mapping[str, Any]]) -> set[str]:
+    return {symbol for symbol, row in rows.items() if row.get("source") == DISLIKED}
+
+
+def _protected(rows: Mapping[str, Mapping[str, Any]]) -> set[str]:
+    """The seed, less whatever of it has been disliked: the names that hold a
+    slot whether or not they have a row, and are never evicted."""
+    return seed() - _disliked_in(rows)
+
+
 def all_tickers() -> list[str]:
-    """The effective universe: seed plus registry, capped, sorted.
+    """The effective universe: seed plus registry, less anything disliked,
+    capped, sorted.
 
     The cap drops the least-recently-opened *non-seed* entries first. Sorting the
     result alphabetically rather than by recency is deliberate — the page sorts
     by V anyway, and a universe whose membership order changed on every view
     would make the ``pending`` list churn for no reason.
     """
-    keep = seed()
+    rows = tracked()
+    dropped = _disliked_in(rows)
+    keep = seed() - dropped
     extra = [(row.get("last_seen_at") or 0.0, symbol)
-             for symbol, row in tracked().items() if symbol not in keep]
+             for symbol, row in rows.items() if symbol not in keep and symbol not in dropped]
     extra.sort(reverse=True)                       # most recently opened first
     room = max(0, MAX_TRACKED - len(keep))
     keep.update(symbol for _seen, symbol in extra[:room])
@@ -293,6 +327,10 @@ def remember(ticker: str, *, source: str = "opened") -> bool:
     now = time.time()
     rows = tracked()
     existing = rows.get(symbol)
+    if existing is not None and existing.get("source") == DISLIKED:
+        # Opening a disliked name builds its own page, and nothing more:
+        # writing it back as a tracked row is the one thing the dislike is for.
+        return False
     row = {
         "ticker": symbol,
         "added_at": (existing or {}).get("added_at") or now,
@@ -305,17 +343,12 @@ def remember(ticker: str, *, source: str = "opened") -> bool:
     # from the page, this one stops the table itself growing without bound.
     _evict(rows)
 
-    table = _get_table()
-    if table is not None:
-        try:
-            table.put_item(Item={
-                "ticker": symbol,
-                "added_at": str(round(row["added_at"], 3)),
-                "last_seen_at": str(round(row["last_seen_at"], 3)),
-                "source": row["source"],
-            })
-        except Exception as exc:  # noqa: BLE001
-            log.warning("dca_universe: could not register %s: %s", symbol, exc)
+    # Only a row that survived. With every non-seed slot pinned, _evict has
+    # just dropped this one and deleted it from the table; writing it now
+    # would put it back there, and the next read (which unions the table with
+    # the mirror) would return it one over the cap.
+    if symbol in rows:
+        _put(row)
     _write_disk(rows)
     if existing is None:
         log.info("dca_universe: now tracking %s (%d total)", symbol, len(rows))
@@ -333,14 +366,18 @@ def _evict(rows: dict[str, dict[str, Any]]) -> None:
     considered only after every pin is gone, and a pin only after every plain
     browse. The cap itself is unchanged by any of it: pinning and holding
     reorder the queue, they do not lengthen it, because every row in the table
-    is six Yahoo reads a day whatever it is marked.
+    is six Yahoo reads a day whatever it is marked. A disliked row is neither a
+    candidate nor counted: it is never rebuilt, so it costs none of that bill,
+    and evicting it would be what lets the name back in.
     """
-    protected = seed()
+    protected = _protected(rows)
+    dropped = _disliked_in(rows)
     room = max(0, MAX_TRACKED - len(protected))
     extra = [(1 if row.get("source") == HELD else 0,
               1 if row.get("source") == PINNED else 0,
               row.get("last_seen_at") or 0.0, symbol)
-             for symbol, row in rows.items() if symbol not in protected]
+             for symbol, row in rows.items()
+             if symbol not in protected and symbol not in dropped]
     if len(extra) <= room:
         return
     extra.sort(reverse=True)
@@ -348,6 +385,21 @@ def _evict(rows: dict[str, dict[str, Any]]) -> None:
         rows.pop(symbol, None)
         _delete(symbol)
         log.info("dca_universe: evicted %s (cap %d)", symbol, MAX_TRACKED)
+
+
+def _put(row: Mapping[str, Any]) -> None:
+    table = _get_table()
+    if table is None:
+        return
+    try:
+        table.put_item(Item={
+            "ticker": row["ticker"],
+            "added_at": str(round(_num(row.get("added_at")), 3)),
+            "last_seen_at": str(round(_num(row.get("last_seen_at")), 3)),
+            "source": row.get("source") or "opened",
+        })
+    except Exception as exc:  # noqa: BLE001
+        log.warning("dca_universe: could not write %s: %s", row.get("ticker"), exc)
 
 
 def _delete(ticker: str) -> None:
@@ -371,7 +423,9 @@ def forget(ticker: str) -> bool:
     if not symbol or symbol in seed():
         return False
     rows = tracked()
-    if symbol not in rows:
+    # A disliked row is not tracked in the sense this undoes, and deleting it
+    # would undo the dislike: the next open would register the name again.
+    if symbol not in rows or rows[symbol].get("source") == DISLIKED:
         return False
     rows.pop(symbol, None)
     _delete(symbol)
@@ -422,11 +476,17 @@ def sync_held(symbols: Iterable[str]) -> dict[str, Any]:
     protected will *never* arrive however long anyone waits — nothing is
     evictable, so there is no slot for it — and the only fix is to release
     something or raise the cap, which is a decision about daily spend.
+
+    A disliked holding is left alone and reported in ``disliked``: the dislike
+    was an explicit choice, and a sync that runs on every page view must not
+    quietly reverse it because the reader happens to own the stock.
     """
-    wanted = [s.strip().upper() for s in symbols if s and s.strip()]
-    wanted = [s for s in dict.fromkeys(wanted) if s not in seed()]
     rows = tracked()
-    room = max(0, MAX_TRACKED - len(seed()))
+    dropped = _disliked_in(rows)
+    asked = list(dict.fromkeys(s.strip().upper() for s in symbols if s and s.strip()))
+    refused = [s for s in asked if s in dropped]
+    wanted = [s for s in asked if s not in seed() and s not in dropped]
+    room = max(0, MAX_TRACKED - len(_protected(rows)))
 
     marked, not_tracked, no_room = [], [], []
     for symbol in wanted:
@@ -443,7 +503,7 @@ def sync_held(symbols: Iterable[str]) -> dict[str, Any]:
         # Absent. Whether that is temporary depends on whether anything in the
         # table could ever be evicted to admit it.
         evictable = sum(1 for s, r in rows.items()
-                        if s not in seed() and r.get("source") != HELD)
+                        if s not in seed() and r.get("source") not in (HELD, DISLIKED))
         if len(marked) >= room and not evictable:
             no_room.append(symbol)
         else:
@@ -460,7 +520,7 @@ def sync_held(symbols: Iterable[str]) -> dict[str, Any]:
                  len(marked), len(demoted), len(not_tracked), len(no_room))
     return {"held": sorted(still), "marked": len(marked),
             "demoted": sorted(demoted), "not_tracked": not_tracked,
-            "no_room": no_room, "max_held": room}
+            "no_room": no_room, "max_held": room, "disliked": refused}
 
 
 def pin(ticker: str) -> dict[str, Any]:
@@ -490,6 +550,10 @@ def pin(ticker: str) -> dict[str, Any]:
         genuinely absent from the table — and telling them "not tracked" sends
         them to rebuild it, which will not help. The full budget is the cause
         and the only thing they can act on.
+    ``disliked``
+        Keeping a name and excluding it are opposite instructions. Restoring it
+        is a separate, visible step, so one click cannot silently reverse the
+        other.
     """
     symbol = (ticker or "").strip().upper()
     if not symbol:
@@ -501,8 +565,10 @@ def pin(ticker: str) -> dict[str, Any]:
     row = rows.get(symbol)
     if row is not None and row.get("source") == PINNED:
         return {"pinned": True, "reason": "already", "ticker": symbol}
+    if row is not None and row.get("source") == DISLIKED:
+        return {"pinned": False, "reason": "disliked", "ticker": symbol}
 
-    room = max(0, MAX_TRACKED - len(seed()))
+    room = max(0, MAX_TRACKED - len(_protected(rows)))
     have = pinned()
     if len(have) >= room:
         return {"pinned": False, "reason": "no_room", "ticker": symbol,
@@ -533,6 +599,54 @@ def unpin(ticker: str) -> dict[str, Any]:
     return {"pinned": False, "ticker": symbol}
 
 
+def disliked() -> set[str]:
+    """Names taken off the ranked table and out of the daily sweep."""
+    return _disliked_in(tracked())
+
+
+def dislike(ticker: str) -> dict[str, Any]:
+    """Take *ticker* off the ranked table and out of the daily sweep, for good.
+
+    Works on any symbol, seed or not, tracked or not: disliking a name before it
+    has ever scored is how it is kept from joining once it does. Whatever the
+    row was marked before (pinned, held) is overwritten. Refused only when
+    :data:`MAX_DISLIKED` rows are already disliked.
+    """
+    symbol = (ticker or "").strip().upper()
+    if not symbol:
+        return {"disliked": False, "reason": "invalid", "ticker": symbol}
+    rows = tracked()
+    row = rows.get(symbol)
+    if row is not None and row.get("source") == DISLIKED:
+        return {"disliked": True, "reason": "already", "ticker": symbol}
+    if len(_disliked_in(rows)) >= MAX_DISLIKED:
+        return {"disliked": False, "reason": "too_many", "ticker": symbol,
+                "max_disliked": MAX_DISLIKED}
+    now = time.time()
+    rows[symbol] = {"ticker": symbol, "added_at": (row or {}).get("added_at") or now,
+                    "last_seen_at": now, "source": DISLIKED}
+    _put(rows[symbol])
+    _write_disk(rows)
+    log.info("dca_universe: disliked %s", symbol)
+    return {"disliked": True, "ticker": symbol}
+
+
+def undislike(ticker: str) -> dict[str, Any]:
+    """Lift a dislike. The row goes, so a seed name is back at once and any
+    other name is back the way every name arrives: by scoring (see
+    :func:`remember`), which the caller can do at once if a score is on disk.
+    """
+    symbol = (ticker or "").strip().upper()
+    rows = tracked()
+    if not symbol or (rows.get(symbol) or {}).get("source") != DISLIKED:
+        return {"disliked": False, "reason": "already", "ticker": symbol}
+    rows.pop(symbol)
+    _delete(symbol)
+    _write_disk(rows)
+    log.info("dca_universe: restored %s", symbol)
+    return {"disliked": False, "ticker": symbol}
+
+
 def _set_source(symbol: str, source: str) -> None:
     """Rewrite one row's ``source``, in the table and the mirror.
 
@@ -551,17 +665,7 @@ def _set_source(symbol: str, source: str) -> None:
     row["last_seen_at"] = time.time()
     rows[symbol] = row
 
-    table = _get_table()
-    if table is not None:
-        try:
-            table.put_item(Item={
-                "ticker": symbol,
-                "added_at": str(round(_num(row.get("added_at")), 3)),
-                "last_seen_at": str(round(_num(row.get("last_seen_at")), 3)),
-                "source": source,
-            })
-        except Exception as exc:  # noqa: BLE001
-            log.warning("dca_universe: could not re-source %s: %s", symbol, exc)
+    _put(row)
     _write_disk(rows)
 
 
@@ -582,14 +686,15 @@ def touch(ticker: str) -> None:
 def stats() -> dict[str, Any]:
     """Registry size and capacity, for the page to explain an eviction."""
     rows = tracked()
-    protected = seed()
+    dropped = _disliked_in(rows)
+    protected = seed() - dropped
     return {
-        "tracked": len(rows),
+        "tracked": len(rows) - len(dropped),
         "seed": len(protected),
         "effective": len(all_tickers()),
         "max": MAX_TRACKED,
         "room": max(0, MAX_TRACKED - len(protected) -
-                    len([s for s in rows if s not in protected])),
+                    len([s for s in rows if s not in protected and s not in dropped])),
         # Both numbers, because "room: 0" alone does not tell a reader whether
         # the next name they open will cost them one they wanted. With 37 of 37
         # slots pinned nothing is evictable and the *new* name is the one that
@@ -599,4 +704,5 @@ def stats() -> dict[str, Any]:
         # Holdings are protected above pins, so this is the share of the
         # non-seed budget that is spoken for before anything can be evicted.
         "held": len(held()),
+        "disliked": len(dropped),
     }

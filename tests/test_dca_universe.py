@@ -456,3 +456,169 @@ class PeerGroupCoverageTests(unittest.TestCase):
 
         self.assertIn("GOOG", TICKER_MODELS)
         self.assertNotIn("GOOG", du.seed())
+
+
+class Dislikes(RegistryBase):
+    """Taking a name off the ranked table and out of the daily sweep (asked
+    2026-10-07). The failure to guard against is a dislike that does not stick:
+    absence is what a new name looks like, so a dislike stored as a deletion
+    would be undone by the next person to open the ticker."""
+
+    def test_disliking_a_seed_name_takes_it_out_of_the_universe(self):
+        self.assertIn("MSFT", du.all_tickers())
+        self.assertTrue(du.dislike("MSFT")["disliked"])
+        self.assertNotIn("MSFT", du.all_tickers())
+        self.assertEqual(du.disliked(), {"MSFT"})
+
+    def test_a_dislike_survives_the_name_being_opened_again(self):
+        du.remember("SHOP")
+        du.dislike("SHOP")
+        self.assertFalse(du.remember("SHOP"))
+        du.touch("SHOP")
+        self.assertNotIn("SHOP", du.all_tickers())
+        self.assertEqual(du.tracked()["SHOP"]["source"], du.DISLIKED)
+
+    def test_a_name_can_be_disliked_before_it_ever_scores(self):
+        du.dislike("NEWCO")
+        self.assertFalse(du.remember("NEWCO"))
+        self.assertNotIn("NEWCO", du.all_tickers())
+
+    def test_restoring_brings_a_seed_name_straight_back(self):
+        du.dislike("MSFT")
+        self.assertFalse(du.undislike("MSFT")["disliked"])
+        self.assertIn("MSFT", du.all_tickers())
+        self.assertNotIn("MSFT", du.tracked())
+
+    def test_restoring_any_other_name_lets_it_rejoin_by_scoring(self):
+        """Registration stays gated on a score: restoring drops the marker, and
+        the name comes back the way every name arrives."""
+        du.remember("SHOP")
+        du.dislike("SHOP")
+        du.undislike("SHOP")
+        self.assertNotIn("SHOP", du.all_tickers())
+        self.assertTrue(du.remember("SHOP"))
+        self.assertIn("SHOP", du.all_tickers())
+
+    def test_forget_does_not_undo_a_dislike(self):
+        du.remember("SHOP")
+        du.dislike("SHOP")
+        self.assertFalse(du.forget("SHOP"))
+        self.assertIn("SHOP", du.disliked())
+
+    def test_a_dislike_overrides_a_pin_and_a_pin_does_not_override_a_dislike(self):
+        du.remember("SHOP")
+        du.pin("SHOP")
+        du.dislike("SHOP")
+        self.assertNotIn("SHOP", du.pinned())
+        result = du.pin("SHOP")
+        self.assertFalse(result["pinned"])
+        self.assertEqual(result["reason"], "disliked")
+        self.assertIn("SHOP", du.disliked())
+
+    def test_a_disliked_row_is_never_evicted_and_holds_no_slot(self):
+        du.MAX_TRACKED = len(du.seed()) + 2
+        du.remember("GONE")
+        du.dislike("GONE")
+        du.remember("A")
+        du.remember("B")
+        self.assertTrue({"A", "B"} <= set(du.all_tickers()),
+                        "the disliked row took one of the two slots")
+        du.remember("C")                  # evicts A, the oldest live row
+        self.assertIn("GONE", du.disliked())
+        self.assertNotIn("A", du.all_tickers())
+        self.assertLessEqual(len(du.all_tickers()), du.MAX_TRACKED)
+
+    def test_a_disliked_seed_name_gives_its_slot_back(self):
+        du.MAX_TRACKED = len(du.seed())   # no room beyond the seed
+        du.remember("A")
+        self.assertNotIn("A", du.all_tickers())
+        du.dislike("MSFT")
+        du.remember("A")
+        self.assertIn("A", du.all_tickers())
+        self.assertEqual(len(du.all_tickers()), du.MAX_TRACKED)
+
+    def test_a_disliked_holding_is_not_marked_again(self):
+        """The sync runs on every page view; owning the stock must not quietly
+        reverse an explicit dislike."""
+        du.remember("OWNED")
+        du.dislike("OWNED")
+        result = du.sync_held(["OWNED"])
+        self.assertEqual(result["disliked"], ["OWNED"])
+        self.assertNotIn("OWNED", result["not_tracked"])
+        self.assertNotIn("OWNED", du.held())
+        self.assertIn("OWNED", du.disliked())
+
+    def test_stats_count_dislikes_apart_from_the_tracked(self):
+        du.remember("SHOP")
+        du.remember("GONE")
+        du.dislike("GONE")
+        du.dislike("MSFT")
+        s = du.stats()
+        self.assertEqual(s["disliked"], 2)
+        self.assertEqual(s["tracked"], 1)
+        self.assertEqual(s["seed"], len(du.seed()) - 1)
+
+    def test_the_dislike_list_is_bounded(self):
+        old = du.MAX_DISLIKED
+        du.MAX_DISLIKED = 2
+        try:
+            du.dislike("A")
+            du.dislike("B")
+            result = du.dislike("C")
+            self.assertFalse(result["disliked"])
+            self.assertEqual(result["reason"], "too_many")
+            self.assertNotIn("C", du.disliked())
+        finally:
+            du.MAX_DISLIKED = old
+
+    def test_repeats_are_harmless(self):
+        du.dislike("SHOP")
+        self.assertEqual(du.dislike("SHOP")["reason"], "already")
+        self.assertEqual(du.undislike("NVDA")["reason"], "already")
+        self.assertIn("NVDA", du.all_tickers())
+
+    def test_it_survives_a_round_trip_through_the_mirror(self):
+        du.dislike("MSFT")
+        blob = json.loads(du.LOCAL_PATH.read_text())
+        self.assertEqual(blob["tickers"]["MSFT"]["source"], du.DISLIKED)
+
+
+class _FakeTable:
+    """Just enough of a DynamoDB table for the registry's writes and its Scan."""
+
+    def __init__(self):
+        self.items: dict[str, dict] = {}
+
+    def put_item(self, Item):
+        self.items[Item["ticker"]] = dict(Item)
+
+    def delete_item(self, Key):
+        self.items.pop(Key["ticker"], None)
+
+    def scan(self, **_kwargs):
+        return {"Items": list(self.items.values())}
+
+
+class TableWrites(RegistryBase):
+
+    def test_a_name_evicted_on_the_way_in_is_not_written_back(self):
+        """With every non-seed slot pinned, remember() evicts the new row and
+        deletes it from the table. The write after that used to put it straight
+        back, and the next read (table and mirror unioned) returned it one over
+        the cap."""
+        table = _FakeTable()
+        du._table = table
+        du.MAX_TRACKED = len(du.seed()) + 1
+        du.remember("A")
+        du.pin("A")
+        self.assertFalse(du.remember("B"))
+        self.assertNotIn("B", table.items)
+        self.assertNotIn("B", du.tracked())
+
+    def test_a_dislike_reaches_the_table(self):
+        table = _FakeTable()
+        du._table = table
+        du.dislike("MSFT")
+        self.assertEqual(table.items["MSFT"]["source"], du.DISLIKED)
+        du.undislike("MSFT")
+        self.assertNotIn("MSFT", table.items)

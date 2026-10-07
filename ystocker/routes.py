@@ -1770,7 +1770,7 @@ def api_dca(ticker: str):
         # Registry state for this ticker, so the page can offer to keep it. The
         # table is at its cap, where every new lookup evicts the
         # least-recently-viewed name that nobody pinned.
-        "pinned": symbol in dca_universe_pinned(),
+        **_dca_marks(symbol),
         "pin_editable": _dca_pin_editable(),
         "registry": _dca_registry_stats(),
         "built_at": payload.get("_ts"),
@@ -1778,14 +1778,26 @@ def api_dca(ticker: str):
     })
 
 
-def dca_universe_pinned() -> set:
-    """`dca_universe.pinned()`, tolerant of the table being unreachable."""
+def _dca_marks(symbol: str) -> dict:
+    """The registry's view of one name, from one read of it: kept, disliked,
+    and whether it is one of the standard set. Tolerant of the table being
+    unreachable -- the score is the page, not the registry.
+
+    A standard name reads as kept (asked 2026-10-07: "for the default stocks,
+    enable 保存 by default"). It is never dropped, which is all keeping means,
+    and drawing it unkept invited a click that could only be refused. A
+    disliked one is not kept, whatever it is.
+    """
     try:
         from ystocker import dca_universe
 
-        return dca_universe.pinned()
+        source = (dca_universe.tracked().get(symbol) or {}).get("source")
+        seed = symbol in dca_universe.seed()
+        disliked = source == dca_universe.DISLIKED
+        return {"pinned": not disliked and (seed or source == dca_universe.PINNED),
+                "disliked": disliked, "seed": seed}
     except Exception:  # noqa: BLE001 - the score is the page, not the registry
-        return set()
+        return {"pinned": False, "disliked": False, "seed": False}
 
 
 def _dca_registry_stats() -> dict:
@@ -1795,6 +1807,12 @@ def _dca_registry_stats() -> dict:
         return dca_universe.stats()
     except Exception:  # noqa: BLE001
         return {}
+
+
+def _dca_valid_v(v) -> bool:
+    """A V the overview may draw: a finite number. ``None`` is a refused score,
+    and a bool is not a number however Python counts it."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def _dca_score_basis(result: dict) -> dict:
@@ -1865,6 +1883,12 @@ def api_dca_list():
     A background warm is kicked for whatever is missing, so an empty overview
     fills itself within a few minutes of the first visit rather than needing
     somebody to open each ticker by hand.
+
+    Only a name with a valid V is a row (asked 2026-10-07: "don't display
+    anything without valid V"). One that is built but cannot be scored comes
+    back in ``unscored`` instead, so ``scored`` against ``universe`` still says
+    how much of the list is missing. A disliked name is not in ``universe`` at
+    all; the list of them goes to whoever may restore one.
     """
     from ystocker import dca
     from ystocker import dca_universe
@@ -1874,6 +1898,8 @@ def api_dca_list():
     wanted = dca_history.universe()
     have = set(dca_history.cached_tickers())
     protected = dca_universe.seed()
+    editable = _dca_pin_editable()
+    disliked = dca_universe.disliked()
 
     # One read of each per-request lookup, not one per row. See _dca_score.
     recs = _cached_fundamentals()
@@ -1897,11 +1923,14 @@ def api_dca_list():
     # "still rebuilding… this page will fill itself in a few minutes" banner
     # that could never come true.
     held_sync = None
-    if _dca_pin_editable():
+    if editable:
         holdings = (exposure or {}).get("positions") or []
         if holdings:
             try:
                 buildable, unscorable = _dca_scorable_holdings(holdings)
+                # A disliked holding stays out: owning it does not undo the
+                # dislike, and sync_held would refuse to mark it anyway.
+                buildable = [s for s in buildable if s not in disliked]
                 held_sync = dca_universe.sync_held(buildable)
                 held_sync["unscorable"] = unscorable
                 wanted = list(dict.fromkeys([*wanted, *buildable]))
@@ -1910,7 +1939,7 @@ def api_dca_list():
                 log.info("DCA: could not sync holdings into the registry: %s", exc)
     held_names = set((held_sync or {}).get("held") or ())
 
-    rows, pending = [], []
+    rows, pending, unscored = [], [], []
     for symbol in wanted:
         payload = dca_history.peek(symbol) if symbol in have else None
         if payload is None or payload.get("unavailable"):
@@ -1919,6 +1948,9 @@ def api_dca_list():
         result, peer, drift, position = _dca_score(
             symbol, payload, base, recs=recs, exposure=exposure,
             overrides=overrides)
+        if not _dca_valid_v(result["V"]):
+            unscored.append(symbol)
+            continue
         window = payload.get("window") or {}
         rows.append({
             "ticker": symbol,
@@ -1970,10 +2002,9 @@ def api_dca_list():
     if pending and not dca_history.is_warming():
         _dca_kick_universe()
 
-    # Cheapest first, and an unscorable row sorts last rather than as V=0 --
-    # "could not be measured" is not "at its most expensive ever", and putting it
-    # at the top of a table headed "cheapest" would be a straightforward lie.
-    rows.sort(key=lambda r: (r["V"] is None, -(r["V"] or 0)))
+    # Cheapest first. Every row has a V by now: one that could not be scored
+    # went to `unscored` above rather than sorting last as a blank.
+    rows.sort(key=lambda r: -r["V"])
 
     return jsonify({
         "base_dca": base,
@@ -1984,8 +2015,13 @@ def api_dca_list():
         "scored": len(rows),
         "universe": len(wanted),
         "pending": pending,
+        "unscored": unscored,
         "warming": dca_history.is_warming(),
         "registry": dca_universe.stats(),
+        # Whether this visitor may change the shared list (dislike, restore),
+        # and what they have disliked. Nobody else needs the list.
+        "editable": editable,
+        "disliked": sorted(disliked) if editable else [],
         # What the holdings sync did, including what it could not do. `no_room`
         # is the one a reader can act on: the cap is a daily data budget, so a
         # portfolio larger than the non-seed budget is a decision about spend,
@@ -2338,9 +2374,16 @@ def api_dca_untrack(ticker: str):
     Seed names are refused rather than silently ignored: they are the companies
     the framework assigns a model to by name, and a reader who removed MSFT and
     watched it come back on the next sweep would reasonably read that as a bug.
+    (Disliking one, ``/api/dca/dislike/<ticker>``, is how it leaves.)
+
+    VIP-gated like pinning, since 2026-10-07. Until then any visitor, signed in
+    or not, could delete names from the list everyone sees, pinned ones
+    included.
     """
     from ystocker import dca_universe
 
+    if not _dca_pin_editable():
+        return jsonify({"error": "Not permitted.", "reason": "forbidden"}), 403
     symbol = ticker.strip().upper()
     if symbol in dca_universe.seed():
         return jsonify({"error": "This name is part of the standard set.",
@@ -2380,6 +2423,47 @@ def api_dca_pin(ticker: str):
     status = 200 if (result.get("pinned") or result.get("reason") in
                      ("already", None)) else 400
     return jsonify(result), status
+
+
+#: What the dislike route accepts as a symbol: what a listing looks like on
+#: Yahoo (BRK-B, 7203.T, 005930.KQ), so a typo cannot write a junk row into
+#: the shared list.
+_DCA_SYMBOL_RE = re.compile(r"[A-Z0-9^][A-Z0-9.\-=]{0,14}")
+
+
+@bp.route("/api/dca/dislike/<ticker>", methods=["POST", "DELETE"])
+def api_dca_dislike(ticker: str):
+    """Take *ticker* off the ranked table and out of the daily sweep, or put it
+    back. ``POST`` dislikes, ``DELETE`` restores.
+
+    Unlike untracking, a dislike sticks: the row stays, marked, so opening the
+    name again builds its page without returning it to the table, and it works
+    on the standard set too (asked 2026-10-07: "add dislike option, so we can
+    exclude it from the dashboard and scan").
+
+    VIP-gated like pinning, for the same reason: the list is shared. A restored
+    name outside the standard set rejoins only if a score for it is on disk,
+    since registration is gated on scoring everywhere else. Otherwise it
+    rejoins the next time somebody opens it and it scores.
+    """
+    from ystocker import dca_universe
+
+    if not _dca_pin_editable():
+        return jsonify({"error": "Not permitted.", "reason": "forbidden"}), 403
+    symbol = ticker.strip().upper()
+    if not _DCA_SYMBOL_RE.fullmatch(symbol):
+        return jsonify({"error": "Not a ticker.", "reason": "invalid",
+                        "ticker": symbol}), 400
+    if request.method == "POST":
+        result = dca_universe.dislike(symbol)
+    else:
+        result = dca_universe.undislike(symbol)
+        if result.get("reason") is None and symbol not in dca_universe.seed():
+            payload = dca_history.peek(symbol)
+            if payload and not payload.get("unavailable") and payload.get("series"):
+                dca_universe.remember(symbol)
+    result["registry"] = dca_universe.stats()
+    return jsonify(result), 200 if result.get("reason") in (None, "already") else 400
 
 
 def _dca_pin_editable() -> bool:
