@@ -288,6 +288,76 @@
   .fd-seg .range-btn:disabled { opacity: .4; cursor: not-allowed; }
   .fd-status { font-size: 13px; color: var(--t-ink-muted); padding: 14px 0; }
   .fd-status .explain-btn { margin-left: 8px; }
+  /* While the figures load: a panel saying what the server reported, skeleton
+     cards where the charts will go, and an icon for each way a wait can end.
+     The skeleton sits where #fundGrid draws, so a quick answer swaps in place. */
+  :root { --fd-warn: #b45309; --fd-shine: rgba(255,255,255,.8); }
+  .dark { --fd-warn: #fbbf24; --fd-shine: rgba(148,163,184,.1); }
+  .fd-status.is-waiting { padding: 0 0 12px; }
+  .fd-load { display: grid; gap: 12px; margin-bottom: 12px; padding: 14px 16px; border-radius: 12px;
+             border: 1px solid var(--t-line); background: var(--t-surface); }
+  .fd-load.is-quick { padding: 10px 14px; }
+  .fd-load.is-quick .fd-load-msg, .fd-load.is-quick .fd-load-clock,
+  .fd-load.is-quick .fd-steps, .fd-load.is-quick .fd-tip { display: none; }
+  .fd-load-head { display: flex; align-items: center; gap: 12px; }
+  .fd-load-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid;
+                  place-items: center; color: var(--t-accent-ink); background: rgba(99,102,241,.12); }
+  .fd-load.is-quick .fd-load-icon { width: 32px; height: 32px; border-radius: 8px; }
+  .fd-load-icon .fd-ico { width: 22px; height: 22px; animation: fd-breathe 1.8s ease-in-out infinite; }
+  .fd-bars { display: flex; align-items: flex-end; gap: 3px; height: 20px; }
+  .fd-load.is-quick .fd-bars { height: 16px; }
+  .fd-bars i { width: 4px; height: 100%; border-radius: 2px; background: currentColor;
+               transform-origin: 50% 100%; animation: fd-bar 1.1s ease-in-out infinite; }
+  .fd-bars i:nth-child(2) { animation-delay: .15s; }
+  .fd-bars i:nth-child(3) { animation-delay: .3s; }
+  .fd-bars i:nth-child(4) { animation-delay: .45s; }
+  .fd-load-text { flex: 1; min-width: 0; }
+  .fd-load-title { font-size: 14px; font-weight: 600; color: var(--t-ink-strong); }
+  .fd-load-msg { font-size: 12px; line-height: 1.5; color: var(--t-ink-dim); margin-top: 2px; }
+  .fd-load-clock { flex: none; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;
+                   font-size: 12px; color: var(--t-ink-dim); font-variant-numeric: tabular-nums; }
+  .fd-load-clock .fd-ico { width: 14px; height: 14px; }
+  .fd-steps { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--t-ink-dim); }
+  .fd-step { display: inline-flex; align-items: center; gap: 6px; }
+  .fd-step .fd-ico { width: 14px; height: 14px; flex: none; }
+  .fd-step.is-done .fd-ico { color: var(--fd-up); }
+  .fd-step.is-now, .fd-step.is-idle { color: var(--t-ink-strong); font-weight: 600; }
+  .fd-step.is-idle .fd-ico { color: var(--fd-warn); }
+  .fd-step-dot { flex: none; width: 8px; height: 8px; margin: 3px; border-radius: 999px;
+                 border: 1.5px solid currentColor; opacity: .7; }
+  .fd-spin { flex: none; width: 14px; height: 14px; border-radius: 999px; border: 2px solid var(--t-accent-ink);
+             border-right-color: transparent; animation: fd-spin .8s linear infinite; }
+  .fd-tip { display: flex; align-items: flex-start; gap: 7px; padding-top: 10px; border-top: 1px dashed var(--t-line);
+            font-size: 12px; line-height: 1.5; color: var(--t-ink-muted); }
+  .fd-tip > .fd-ico { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--fd-warn); }
+  .fd-tip-text { animation: fd-fade .45s ease both; }
+  .fd-tip-text b { font-weight: 600; color: var(--t-ink-strong); margin-right: 5px; }
+  .fd-skel { position: relative; overflow: hidden; }
+  .fd-skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+                    background: linear-gradient(100deg, transparent 20%, var(--fd-shine) 50%, transparent 80%);
+                    animation: fd-shimmer 1.6s ease-in-out infinite; }
+  .fd-sk { display: block; height: 10px; border-radius: 4px; background: var(--t-line); }
+  .fd-sk.is-title { width: 45%; margin-top: 3px; }
+  .fd-sk.is-value { width: 32%; height: 18px; margin-top: 9px; }
+  .fd-sk.is-meta { width: 58%; height: 8px; margin-top: 7px; }
+  .fd-skel-bars { display: flex; align-items: flex-end; gap: 4px; }
+  .fd-skel-bars i { flex: 1; border-radius: 3px 3px 0 0; background: var(--t-line); }
+  @media (max-width: 1099px) { .fd-skel:nth-child(n+5) { display: none; } }
+  @media (max-width: 639px) { .fd-skel:nth-child(n+3) { display: none; } }
+  .fd-notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 12px;
+               border: 1px solid var(--t-line); background: var(--t-surface); line-height: 1.5; }
+  .fd-notice > .fd-ico { width: 20px; height: 20px; flex: none; }
+  .fd-notice.is-warn > .fd-ico { color: var(--fd-warn); }
+  .fd-notice.is-accent > .fd-ico { color: var(--t-accent-ink); }
+  .fd-notice.is-dim > .fd-ico { color: var(--t-ink-dim); }
+  @keyframes fd-bar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+  @keyframes fd-spin { to { transform: rotate(360deg); } }
+  @keyframes fd-shimmer { to { transform: translateX(100%); } }
+  @keyframes fd-breathe { 50% { opacity: .5; } }
+  @keyframes fd-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .fd-bars i, .fd-spin, .fd-load-icon .fd-ico, .fd-tip-text, .fd-skel::after { animation: none; }
+  }
   .fd-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
   @media (min-width: 640px) { .fd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (min-width: 1100px) { .fd-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -6528,27 +6598,182 @@ async function explainChart(chartKey) {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // ── While the figures load ────────────────────────────────────────────────
+  // A company nobody has opened yet takes seconds, sometimes a minute, and a
+  // blank tab for that long reads as broken. So the wait gets a panel: the step
+  // the server last reported (building, or queued for a free slot), a clock
+  // since the tab asked, a tip, and skeleton cards where the charts will go.
+  // The steps follow the server's own states and nothing is timed, for the
+  // reason /agents' progress bar is counted: a bar driven by elapsed time would
+  // be a guess drawn as a measurement. A company already read answers within
+  // one request, so the panel waits REVEAL_MS before showing and a quick answer
+  // just swaps the skeleton for the cards.
+  const WAITING = ['loading', 'building', 'queued'];
+  const TIPS = ['source', 'q4', 'splits', 'views', 'tools', 'cap'];
+  const REVEAL_MS = 600, TIP_MS = 7000;
+  // Heroicons outlines, stroked in currentColor so each takes its rule's tone.
+  const ICONS = {
+    check: 'M4.5 12.75l6 6 9-13.5',
+    clock: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z',
+    warn: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z',
+    calendar: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5',
+    none: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636',
+    doc: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
+    bulb: 'M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.478a12.06 12.06 0 01-4.5 0m3.75 2.383a14.406 14.406 0 01-3 0M14.25 18v-.192c0-.983.658-1.823 1.508-2.316a7.5 7.5 0 10-7.517 0c.85.493 1.509 1.333 1.509 2.316V18',
+  };
+  // Each way a wait can end: its icon, and the tone the icon takes.
+  const ENDINGS = {
+    failed: ['warn', 'warn'], timeout: ['clock', 'warn'], capped: ['calendar', 'accent'],
+    invalid: ['none', 'dim'], unavailable: ['doc', 'dim'],
+  };
+  const BARS = '<span class="fd-bars"><i></i><i></i><i></i><i></i></span>';
+  let shown = null, shownExtra;                    // what #fundStatus shows, for a language switch
+  let waitStart = 0, wasQueued = false, tip = 0, tipAt = 0, clock = null, reveal = null;
+
+  const icon = name => '<svg class="fd-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"'
+    + ` stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
+  const named = (key, fallback) => tr(key, fallback).replace('{t}', () => TICKER);
+
+  // Where the cards will draw: eight, of which CSS shows four on a tablet and
+  // two on a phone. The bars rise as a revenue chart tends to, varied per card.
+  function skeletonHtml() {
+    let html = '';
+    for (let k = 0; k < 8; k++) {
+      let bars = '';
+      for (let i = 0; i < 12; i++) bars += `<i style="height:${Math.min(100, 26 + i * 5 + (i * 37 + k * 23) % 19)}%"></i>`;
+      html += '<div class="fd-card fd-skel"><span class="fd-sk is-title"></span><span class="fd-sk is-value"></span>'
+        + `<span class="fd-sk is-meta"></span><div class="fd-canvas fd-skel-bars">${bars}</div></div>`;
+    }
+    return html;
+  }
+
+  function waitHtml() {
+    return `<div class="fd-load" data-fd-load hidden>
+        <div class="fd-load-head">
+          <span class="fd-load-icon" data-fd-icon aria-hidden="true"></span>
+          <div class="fd-load-text" role="status">
+            <p class="fd-load-title" data-fd-title></p>
+            <p class="fd-load-msg" data-fd-msg></p>
+          </div>
+          <span class="fd-load-clock" aria-hidden="true">${icon('clock')}<span data-fd-time></span></span>
+        </div>
+        <ol class="fd-steps" data-fd-steps></ol>
+        <p class="fd-tip" data-fd-tip></p>
+      </div>
+      <div class="fd-grid" aria-hidden="true">${skeletonHtml()}</div>`;
+  }
+
+  // The steps so far. Waiting for a slot is listed only once the server has
+  // said so, and stays, ticked, once the build starts.
+  function stepsHtml(state) {
+    const steps = [['lookup', state === 'loading' ? 'now' : 'done']];
+    if (wasQueued) steps.push(['queue', state === 'queued' ? 'idle' : 'done']);
+    steps.push(['read', state === 'building' ? 'now' : 'todo'], ['draw', 'todo']);
+    const mark = { done: icon('check'), now: '<span class="fd-spin"></span>', idle: icon('clock'),
+                   todo: '<span class="fd-step-dot"></span>' };
+    return steps.map(([key, st]) => `<li class="fd-step is-${st}">${mark[st]}`
+      + `<span>${esc(named('fund.load_step_' + key, key))}</span></li>`).join('');
+  }
+
+  function paintTip() {
+    const box = $('fundStatus').querySelector('[data-fd-tip]');
+    if (!box) return;
+    const text = tr('fund.tip_' + TIPS[tip % TIPS.length], '');
+    box.hidden = !text;
+    box.innerHTML = `${icon('bulb')}<span class="fd-tip-text"><b>${esc(tr('fund.tip_label', 'Tip'))}</b>${esc(text)}</span>`;
+  }
+
+  // Once a second while waiting: the clock, and the next tip every TIP_MS.
+  function tick() {
+    const out = $('fundStatus').querySelector('[data-fd-time]');
+    if (!out) return;
+    const s = Math.max(0, Math.floor((Date.now() - waitStart) / 1000));
+    out.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (tipAt && Date.now() - tipAt >= TIP_MS) { tip++; tipAt = Date.now(); paintTip(); }
+  }
+
+  function stopWaiting() {
+    clearInterval(clock); clearTimeout(reveal);
+    clock = reveal = null;
+  }
+
+  // One state of the wait, painted into the panel waitHtml() built. The poll
+  // repeats its state every few seconds, and repainting would restart the
+  // spinner and announce the status again, so only a change is drawn.
+  function paintWait(state) {
+    const box = $('fundStatus').querySelector('[data-fd-load]');
+    if (!box || box.dataset.state === state) return;
+    const was = box.dataset.state || '';
+    box.dataset.state = state;
+    if (state === 'queued') wasQueued = true;
+    const quick = state === 'loading';
+    box.classList.toggle('is-quick', quick);
+    if (!quick) box.hidden = false;
+    else if (box.hidden && !reveal) {
+      reveal = setTimeout(() => {
+        reveal = null;
+        const now = $('fundStatus').querySelector('[data-fd-load]');
+        if (now) now.hidden = false;
+      }, REVEAL_MS);
+    }
+    const pic = box.querySelector('[data-fd-icon]');
+    const want = state === 'queued' ? 'clock' : 'bars';
+    if (pic.dataset.pic !== want) { pic.dataset.pic = want; pic.innerHTML = want === 'clock' ? icon('clock') : BARS; }
+    box.querySelector('[data-fd-title]').textContent = named('fund.load_title_' + state, {
+      loading: 'Loading {t}’s fundamentals', building: 'Reading {t}’s filings', queued: 'Waiting to read {t}’s filings',
+    }[state]);
+    box.querySelector('[data-fd-msg]').textContent = quick ? '' : state === 'queued'
+      ? tr('fund.load_msg_queued', 'Another company’s filings are being read first. This one starts as soon as a slot is free.')
+      : tr('fund.load_msg_building', 'The first view of a company reads its figures from its own filings. It usually takes a few seconds, and after that it opens straight away.');
+    box.querySelector('[data-fd-steps]').innerHTML = stepsHtml(state);
+    if (!quick && (was === '' || was === 'loading')) { tipAt = Date.now(); paintTip(); }
+    tick();
+  }
+
   function setStatus(state, extra) {
     const el = $('fundStatus');
+    const waiting = WAITING.includes(state);
+    if (!waiting) stopWaiting();
+    else if (!WAITING.includes(shown)) {
+      // A new wait, the first load or a retry: build the panel once and start
+      // its clock. The polls that follow repaint only what changed.
+      stopWaiting();
+      waitStart = Date.now(); wasQueued = false; tipAt = 0;
+      tip = Math.floor(Math.random() * TIPS.length);
+      el.innerHTML = waitHtml();
+      clock = setInterval(tick, 1000);
+    }
+    shown = state; shownExtra = extra;
+    el.classList.toggle('is-waiting', waiting);
+    if (!state) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    if (waiting) { paintWait(state); return; }
     const messages = {
-      loading: tr('fund.loading', 'Loading fundamentals…'),
-      building: tr('fund.building', 'Reading this company’s filings — the first view of a ticker takes a few seconds…'),
-      queued: tr('fund.queued', 'Waiting for a slot — another company is being read…'),
       failed: tr('fund.failed', 'Couldn’t load the filings just now.'),
       capped: tr('fund.capped_day', 'Today’s allowance for reading new companies’ filings is used up. This one will be ready tomorrow; companies already read still open.'),
       timeout: tr('fund.timeout', 'Still working on it — this is taking longer than usual.'),
       invalid: tr('fund.invalid', 'This is not a ticker the filings can be looked up by.'),
     };
-    if (!state) { el.hidden = true; el.innerHTML = ''; return; }
-    el.hidden = false;
     const msg = state === 'unavailable'
       ? tr('fund.un_' + extra, tr('fund.un_no_statements', 'No financial statements were found for this listing.'))
       : messages[state];
     const retry = (state === 'failed' || state === 'timeout')
       ? ` <button type="button" class="explain-btn" data-fund-retry>${esc(tr('fund.retry', 'Retry'))}</button>` : '';
-    const pulse = (state === 'loading' || state === 'building' || state === 'queued') ? ' animate-pulse' : '';
-    el.innerHTML = `<span class="${pulse.trim()}">${esc(msg)}</span>${retry}`;
+    const [pic, tone] = ENDINGS[state] || ENDINGS.failed;
+    el.innerHTML = `<div class="fd-notice is-${tone}">${icon(pic)}<p>${esc(msg)}${retry}</p></div>`;
   }
+
+  // The panel and the endings are composed here, where I18n.apply() cannot
+  // reach them. render() redraws a payload; before there is one, only this.
+  document.addEventListener('i18n:langchange', () => {
+    if (payload || !shown) return;
+    if (!WAITING.includes(shown)) { setStatus(shown, shownExtra); return; }
+    const el = $('fundStatus');
+    const open = !el.querySelector('[data-fd-load]').hidden;
+    el.innerHTML = waitHtml();                    // the same clock, steps and tip, in the new words
+    if (open) el.querySelector('[data-fd-load]').hidden = false;
+    paintWait(shown);
+  });
 
   // One company's payload through the bounded poll, this one or one being
   // compared. onState is told each waiting state; the answer is {payload}, or

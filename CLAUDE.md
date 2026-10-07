@@ -1773,10 +1773,29 @@ then cleared the status line and failed on the missing periods, so the poll
 never ran. `fetchFundamentals` now takes only a 200, and the page and every
 compared company share it.
 
+**While it loads, the tab says what it is waiting on** (asked 2026-10-06: "when
+data is loading show some icons and prompts"). `setStatus` draws a panel: an
+animated icon, "Reading NBIS’s filings", a line on why a first view takes
+seconds, the steps so far, a clock since the tab asked, and a new tip every 7 s,
+over skeleton cards where the charts will draw.
+- **The steps are the server's states, never time.** A 202 is building, or
+  `queued` for a slot, which adds a "wait for a free slot" step. A bar that
+  moved with the clock would be a guess drawn as a measurement, as on /agents.
+- **No flash for a company already read.** It answers within one request, so
+  the panel waits 600 ms before showing, and a quick answer just swaps the
+  skeleton for the cards.
+- **Only a change is painted.** The poll repeats its state every few seconds;
+  repainting would restart the spinner and announce the status again.
+- **It lives in `#fundStatus`**, never `#fundGrid`, so `render()`'s
+  `setStatus(null)` clears it. Each ending (failed, timed out, today's cap, not
+  a ticker, no statements) gets its own icon.
+
 Tests: `tests/test_xbrl.py` (57, NVIDIA's filings), `tests/test_statements.py`
 (12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (69, the
 range/YoY/cap arithmetic, the calendar alignment, and the poll read out of the
-template), `tests/check_fundamentals_endpoints.py` (30,
+template), `node tests/check_fundamentals_loading.mjs` (72, the loading panel
+read out of the template, against the real i18n.js and fake timers),
+`tests/check_fundamentals_endpoints.py` (30,
 hermetic, including the suggestions and the compare row), `tests/test_directory.py` (13, SEC's real rows),
 `tests/check_companies_directory.py` (6, hermetic),
 `tests/test_research_long_history.py` (5) with
