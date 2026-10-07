@@ -1112,7 +1112,7 @@
     <div class="flex items-center justify-between mb-3">
       <div>
         <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200" data-i18n="history.walls_title">Options Walls</h2>
-        <p class="text-xs text-slate-500" data-i18n="history.walls_desc">Strike with highest aggregate open interest across all expirations</p>
+        <p class="text-xs text-slate-500" data-i18n="history.walls_desc">Strikes with the most open call / put contracts, nearest 12 expiries combined — act as resistance / support</p>
       </div>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="optionsWallsGrid"></div>
@@ -3418,20 +3418,26 @@ async function _loadOptionsData() {
       const priceData = _periodCache['1y'];
       const lastPrice = priceData?.prices ? priceData.prices.filter(p => p != null).at(-1) : null;
 
-      function _wallItem(label, strike, price, colorClass) {
+      function _wallItem(label, strike, oi, price, colorClass) {
         const distPct   = (price != null && strike != null) ? ((strike - price) / price * 100).toFixed(1) : null;
         const distLabel = distPct != null ? (distPct >= 0 ? '+' + distPct : distPct) + '%' : '—';
         const distCls   = distPct == null ? 'text-slate-500' : parseFloat(distPct) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400';
+        // The wall is the strike where this many contracts are still open, so
+        // the tile says how many rather than only naming the strike.
+        const oiLine    = oi != null
+          ? `<div class="text-[11px] mt-0.5 text-slate-500">${(I18n.t('history.walls_oi') || '{v} contracts open').replace('{v}', Number(oi).toLocaleString('en-US'))}</div>`
+          : '';
         return `<div class="bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-xl px-3 py-3">
           <div class="text-xs text-slate-500 mb-1">${label}</div>
           <div class="text-base font-bold ${colorClass}">${strike != null ? '$' + Number(strike).toFixed(2) : '—'}</div>
           <div class="text-[11px] mt-1 ${distCls}">${distLabel} <span class="text-slate-500 dark:text-slate-600 font-normal">${I18n.t('history.walls_from_spot')}</span></div>
+          ${oiLine}
         </div>`;
       }
 
       let html = '';
-      html += _wallItem(I18n.t('history.walls_call_wall'), cw, lastPrice, 'text-amber-700 dark:text-amber-400');
-      html += _wallItem(I18n.t('history.walls_put_wall'),  pw, lastPrice, 'text-rose-700 dark:text-rose-400');
+      html += _wallItem(I18n.t('history.walls_call_wall'), cw, opts.call_wall_oi, lastPrice, 'text-amber-700 dark:text-amber-400');
+      html += _wallItem(I18n.t('history.walls_put_wall'),  pw, opts.put_wall_oi,  lastPrice, 'text-rose-700 dark:text-rose-400');
       if (lastPrice != null) {
         html += `<div class="bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-xl px-3 py-3">
           <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_spot_price')}</div>
@@ -3444,7 +3450,7 @@ async function _loadOptionsData() {
           html += `<div class="bg-slate-100/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-xl px-3 py-3">
             <div class="text-xs text-slate-500 mb-1">${I18n.t('history.walls_wall_spread')}</div>
             <div class="text-base font-bold text-violet-700 dark:text-violet-400">$${spread}</div>
-            <div class="text-[11px] mt-1 text-slate-500">${spreadPct}${I18n.t('history.walls_pct_of_spot')}</div>
+            <div class="text-[11px] mt-1 text-slate-500">${(I18n.t('history.walls_pct_of_spot') || '{v}% of spot').replace('{v}', spreadPct)}</div>
           </div>`;
         }
       }
@@ -3850,9 +3856,10 @@ function _buildConfigInner(key, d, staticData) {
             c.fillStyle=lc; c.font='11px Inter,sans-serif';
             c.fillText(label, a.left+6, py+off); c.restore();
           }
-          drawRef(staticData.target_price,'#34d39988',CT.c('#34d399'),'Target $'+staticData.target_price?.toFixed(2),-5);
-          drawRef(staticData.call_wall,   '#f59e0b88',CT.c('#f59e0b'),'Call Wall $'+staticData.call_wall?.toFixed(2),-5);
-          drawRef(staticData.put_wall,    '#f43f5e88','#f43f5e','Put Wall $'+staticData.put_wall?.toFixed(2),12);
+          // Named like their legend chips, so a Chinese page does not draw English lines.
+          drawRef(staticData.target_price,'#34d39988',CT.c('#34d399'),(I18n.t('history.target_legend')||'Target')+' $'+staticData.target_price?.toFixed(2),-5);
+          drawRef(staticData.call_wall,   '#f59e0b88',CT.c('#f59e0b'),(I18n.t('history.call_wall_legend')||'Call Wall')+' $'+staticData.call_wall?.toFixed(2),-5);
+          drawRef(staticData.put_wall,    '#f43f5e88','#f43f5e',(I18n.t('history.put_wall_legend')||'Put Wall')+' $'+staticData.put_wall?.toFixed(2),12);
           // Earnings date markers
           if (Array.isArray(staticData.earnings_markers) && staticData.earnings_markers.length > 0) {
             const labels = chart.data.labels;

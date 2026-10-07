@@ -3634,6 +3634,9 @@ _OPTIONS_CACHE: Dict[str, dict] = {}
 _OPTIONS_CACHE_LOCK = threading.Lock()
 _OPTIONS_CACHE_TTL = 20 * 60           # 20 minutes
 _OPTIONS_MAX_EXPIRATIONS = 12          # cap: ~3 months of weeklies + monthlies
+# The walls are summed over these expiries only, and the page says so in words:
+# history.walls_desc / tip_call_wall / tip_put_wall in i18n.js and the options
+# block in research.py all read "nearest 12". Change them with this number.
 
 
 @bp.route("/api/options/<ticker>")
@@ -3657,6 +3660,8 @@ def api_options(ticker: str):
 
     call_wall      = None
     put_wall       = None
+    call_wall_oi   = None
+    put_wall_oi    = None
     put_call_ratio = None
     pc_by_expiry: list[dict] = []
 
@@ -3693,10 +3698,17 @@ def api_options(ticker: str):
                     log.debug("Options chain fetch failed %s %s: %s",
                               ticker, futures[fut], exc)
 
+        # A wall is the strike where the most contracts are still open, so one
+        # with none open is not a wall: when Yahoo reports zero open interest
+        # everywhere, max() would otherwise name the first strike it saw.
         if call_oi:
-            call_wall = max(call_oi, key=call_oi.__getitem__)
+            strike = max(call_oi, key=call_oi.__getitem__)
+            if call_oi[strike] > 0:
+                call_wall, call_wall_oi = strike, call_oi[strike]
         if put_oi:
-            put_wall  = max(put_oi,  key=put_oi.__getitem__)
+            strike = max(put_oi, key=put_oi.__getitem__)
+            if put_oi[strike] > 0:
+                put_wall, put_wall_oi = strike, put_oi[strike]
         total_c = sum(call_oi.values())
         total_p = sum(put_oi.values())
         if total_c > 0:
@@ -3713,6 +3725,9 @@ def api_options(ticker: str):
     result = {
         "call_wall":      _safe(call_wall),
         "put_wall":       _safe(put_wall),
+        # Contracts open at each wall's strike, summed over the same expiries.
+        "call_wall_oi":   call_wall_oi,
+        "put_wall_oi":    put_wall_oi,
         "put_call_ratio": _safe(put_call_ratio),
         "pc_by_expiry":   pc_by_expiry,
     }

@@ -790,8 +790,10 @@ def _render_data_pack(bundle: dict, lang: str) -> str:
 
     # ── §9/§10 options positioning ────────────────────────────────────────
     blocks.append(_block(L("Options positioning", "期权持仓结构"), _lines([
-        (L("Call wall (max call OI strike)", "Call Wall（最大未平仓行权价）"), _usd(opt.get("call_wall"))),
-        (L("Put wall", "Put Wall"), _usd(opt.get("put_wall"))),
+        (L("Call wall (strike with the most open call contracts, nearest 12 expiries)",
+           "Call Wall（看涨期权未平仓量最大的行权价，最近12个到期日合计）"), _usd(opt.get("call_wall"))),
+        (L("Put wall (strike with the most open put contracts, nearest 12 expiries)",
+           "Put Wall（看跌期权未平仓量最大的行权价，最近12个到期日合计）"), _usd(opt.get("put_wall"))),
         (L("Put/call OI ratio", "Put/Call 未平仓比"), _num(opt.get("put_call_ratio"), 2)),
     ])))
 
