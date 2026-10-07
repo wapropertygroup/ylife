@@ -76,7 +76,8 @@ CACHE_VER = "v1"
 #: 2: equity, ROE, revenue growth, dividends per share (2026-10-04). Before
 #: it, every ticker cached before that deploy drew those cards empty for up
 #: to the 12-hour TTL.
-CACHE_REV = 2
+#: 3: FCF margin, enterprise value, EV/Sales and EV/EBIT (2026-10-06).
+CACHE_REV = 3
 
 TTL_SECONDS = fetchguard.env_float("FUNDAMENTALS_TTL_HOURS", 12.0, 1.0) * 3600
 #: A build that got the filings but not the prices is re-tried sooner.

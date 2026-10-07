@@ -29,7 +29,9 @@ const check = (name, cond, detail = '') => {
 // as a plausible number, not as a fault.
 console.log('column parity');
 {
-  const headBlock = tpl.slice(tpl.indexOf('id="heatmapBody"') - 4000,
+  // From the table's own start, not a fixed window before its body: the
+  // header outgrew 4,000 characters when it gained six columns with tooltips.
+  const headBlock = tpl.slice(tpl.indexOf('id="heatmapTable"'),
                               tpl.indexOf('id="heatmapBody"'));
   const heads = [...headBlock.matchAll(/data-col="([a-z_]+)"/g)].map(m => m[1]);
 
@@ -39,12 +41,13 @@ console.log('column parity');
   // +1 for the ticker cell, whose opening <td> sits above the anchor.
   const cells = (rowBlock.match(/<td /g) || []).length + 1;
 
-  check('header declares the expected columns', heads.length === 12,
+  check('header declares the expected columns', heads.length === 18,
         `found ${heads.length}: ${heads.join(',')}`);
   check('body emits one cell per header column', cells === heads.length,
         `${cells} cells vs ${heads.length} headers`);
   check('the new columns are present',
-        heads.includes('pfcf') && heads.includes('fwd_pfcf'));
+        ['pfcf', 'fwd_pfcf', 'rev_growth', 'ev_sales', 'ev_ebit', 'gross_margin', 'op_margin',
+         'fcf_margin'].every(c => heads.includes(c)));
   check('the empty-state colspan matches',
         tpl.includes(`colspan="${heads.length}"`),
         'colspan must equal the column count or the "no results" row misaligns');

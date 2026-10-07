@@ -67,6 +67,11 @@ def _flow(fy24, q1, h1, q2, m9, q3, fy25, q1n):
     ]
 
 
+# NVIDIA's operating income as filed (FY2025: $81,453M).
+NVDA_OPERATING_INCOME = _flow(32_972_000_000, 16_909_000_000, 35_551_000_000, 18_642_000_000,
+                              57_420_000_000, 21_869_000_000, 81_453_000_000, 21_638_000_000)
+
+
 def nvda(**overrides):
     concepts = {
         "Revenues": ("USD", _flow(60_922_000_000, 26_044_000_000, 56_084_000_000, 30_040_000_000,
@@ -400,6 +405,49 @@ class BuildTests(unittest.TestCase):
         self.assertIsNone(val["pe"][0])                         # no four quarters yet
         self.assertEqual(val["now"]["date"], "2025-09-29")
         self.assertEqual(val["now"]["basis_end"], "2025-04-27")
+
+    def test_fcf_margin_in_every_view(self):
+        i = _idx(self.out, "2025-01-26")
+        v = self.q["values"]
+        self.assertAlmostEqual(v["fcf_margin"][i], round((16_629 - 1_077) / 39_331, 4))
+        ttm = self.out["ttm"]["values"]
+        self.assertAlmostEqual(ttm["fcf_margin"][3], round(ttm["fcf"][3] / ttm["revenue"][3], 4))
+        self.assertIn("fcf_margin", self.out["annual"]["values"])
+
+    def test_enterprise_value_and_its_multiples(self):
+        """EV = the quarter's market cap + debt - cash, over TTM revenue and
+        TTM operating income."""
+        out = xbrl.build(nvda(OperatingIncomeLoss=("USD", NVDA_OPERATING_INCOME)),
+                         splits=SPLITS, prices=PRICES)
+        val = out["valuation"]
+        i = _idx(out, "2025-01-26")
+        v, ttm = out["quarterly"]["values"], out["ttm"]["values"]
+        self.assertEqual(ttm["operating_income"][i], 81_453_000_000)
+        ev = 142.62 * v["shares"][i] + 8_463_000_000 - 8_589_000_000
+        self.assertEqual(val["ev"][i], float(round(ev)))
+        self.assertEqual(val["ev_sales"][i], round(ev / ttm["revenue"][i], 2))
+        self.assertEqual(val["ev_ebit"][i], round(ev / ttm["operating_income"][i], 2))
+        self.assertIsNone(val["ev_sales"][0])                   # no four quarters yet
+        self.assertFalse(val["debt_assumed_zero"])
+        self.assertIsNotNone(val["now"]["ev_sales"])
+
+    def test_an_operating_loss_has_no_ev_ebit(self):
+        rows = [dict(r, val=-abs(r["val"])) for r in NVDA_OPERATING_INCOME]
+        out = xbrl.build(nvda(OperatingIncomeLoss=("USD", rows)), splits=SPLITS, prices=PRICES)
+        self.assertTrue(all(v is None for v in out["valuation"]["ev_ebit"]))
+        self.assertTrue(any(v is not None for v in out["valuation"]["ev_sales"]))
+
+    def test_a_company_that_never_filed_debt_has_none(self):
+        doc = nvda()
+        for concept in list(doc["facts"]["us-gaap"]):
+            if "Debt" in concept or "Borrowing" in concept:
+                del doc["facts"]["us-gaap"][concept]
+        out = xbrl.build(doc, splits=SPLITS, prices=PRICES)
+        val = out["valuation"]
+        self.assertTrue(val["debt_assumed_zero"])
+        i = _idx(out, "2025-01-26")
+        shares = out["quarterly"]["values"]["shares"][i]
+        self.assertEqual(val["ev"][i], float(round(142.62 * shares - 8_589_000_000)))
 
     def test_negative_ttm_eps_has_no_pe(self):
         rows = [dict(r, val=-abs(r["val"])) for r in

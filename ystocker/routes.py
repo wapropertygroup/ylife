@@ -27,7 +27,7 @@ from flask import Blueprint, render_template, redirect, url_for, request, flash,
 
 from ystocker import PEER_GROUPS, YT_CHANNELS
 from ystocker import health
-from ystocker.data import fetch_group, dividend_yield_pct, ps_ratio, reset_yf_for_process
+from ystocker.data import fetch_group, dividend_yield_pct, reset_yf_for_process
 # Per-ticker back-off. Owned by data.py because fetch_group() is what knows which
 # tickers it actually attempted; routes only reads it to pre-filter work lists.
 from ystocker.data import TICKER_BACKOFF as _ticker_backoff
@@ -641,6 +641,12 @@ def _df_to_chartdata(df: pd.DataFrame) -> str:
             "div_yield":        _safe(row.get("Dividend Yield (%)")),
             "rev_growth":       _safe(row.get("Revenue Growth (%)")),
             "short_float":      _safe(row.get("Short Float (%)")),
+            # On one currency basis, see data.statement_metrics.
+            "ev_sales":         _safe(row.get("EV/Sales")),
+            "ev_ebit":          _safe(row.get("EV/EBIT")),
+            "gross_margin":     _safe(row.get("Gross Margin (%)")),
+            "op_margin":        _safe(row.get("Operating Margin (%)")),
+            "fcf_margin":       _safe(row.get("FCF Margin (%)")),
         })
     _attach_cashflow(rows)
     return json.dumps(rows).replace("&", r"\u0026").replace("<", r"\u003c").replace(">", r"\u003e")
@@ -787,7 +793,8 @@ def sector(sector_name: str):
     table_cols = ["Name", "Market Cap ($B)", "Current Price",
                   "Target Price", "Upside (%)", "PE (TTM)", "PE (Forward)", "PEG",
                   "EPS Growth TTM (%)", "EPS Growth Q (%)", "Day Change (%)", "EV/EBITDA", "EV ($B)", "EBITDA ($B)",
-                  "P/S Ratio", "P/B Ratio", "FCF ($B)", "Short Float (%)", "Dividend Yield (%)", "Revenue Growth (%)"]
+                  "P/S Ratio", "P/B Ratio", "FCF ($B)", "Short Float (%)", "Dividend Yield (%)", "Revenue Growth (%)",
+                  "EV/Sales", "EV/EBIT", "Gross Margin (%)", "Operating Margin (%)", "FCF Margin (%)"]
     existing_cols = [c for c in table_cols if c in df.columns]
     table_df = df[existing_cols].copy()
 
@@ -2989,8 +2996,10 @@ def api_history(ticker: str):
     # Quarterly earnings markers (best-effort; many tickers lack this data).
     # Not asked for a fund or an index: Yahoo has none, and the scrape that
     # finds none still costs a request (see data.NON_EQUITY_QUOTE_TYPES).
-    from ystocker.data import is_non_equity
+    from ystocker.data import is_non_equity, statement_metrics, statement_rates
     _no_company = is_non_equity((info or {}).get("quoteType"))
+    # Margins and EV multiples on one currency basis (data.statement_metrics).
+    stmt = statement_metrics(info or {}, *statement_rates(info or {}))
     earnings_markers = []
     try:
         if _no_company:
@@ -3160,9 +3169,16 @@ def api_history(ticker: str):
         "eps":              _safe(eps),
         "eps_growth_ttm":   _safe(round(earnings_growth_ttm * 100, 1)) if earnings_growth_ttm is not None else None,
         "eps_growth_q":     _safe(round(earnings_growth_q   * 100, 1)) if earnings_growth_q   is not None else None,
-        "ev_ebitda":        _safe(round(info.get("enterpriseToEbitda"), 1)) if info.get("enterpriseToEbitda") is not None else None,
-        "ev":               _safe(round(info.get("enterpriseValue") / 1e9, 1)) if info.get("enterpriseValue") else None,
-        "ebitda":           _safe(round(info.get("ebitda") / 1e9, 1)) if info.get("ebitda") else None,
+        # One currency basis for every EV and statement figure: an ADR's
+        # EBITDA is TWD or EUR in Yahoo's info. See data.statement_metrics.
+        "ev_ebitda":        _safe(stmt["ev_ebitda"]),
+        "ev":               _safe(stmt["ev_b"]),
+        "ebitda":           _safe(stmt["ebitda_b"]),
+        "ev_sales":         _safe(stmt["ev_sales"]),
+        "ev_ebit":          _safe(stmt["ev_ebit"]),
+        "gross_margin":     _safe(stmt["gross_margin"]),
+        "op_margin":        _safe(stmt["operating_margin"]),
+        "fcf_margin":       _safe(stmt["fcf_margin"]),
         "institutional_holders": _get_institutional_holders(ticker),
         "call_wall":        _safe(call_wall),
         "put_wall":         _safe(put_wall),
@@ -3175,9 +3191,9 @@ def api_history(ticker: str):
         "dividend_yield":    _safe(dividend_yield_pct(info)),
         "dividend_rate":     _safe(info.get("dividendRate")),
         "payout_ratio":      _safe(round(info.get("payoutRatio") * 100, 1)) if info.get("payoutRatio") else None,
-        "ps_ratio":          _safe(ps_ratio(info)),
+        "ps_ratio":          _safe(stmt["ps"]),
         "pb_ratio":          _safe(round(info.get("priceToBook"), 2)) if info.get("priceToBook") else None,
-        "fcf":               _safe(round(info.get("freeCashflow") / 1e9, 1)) if info.get("freeCashflow") else None,
+        "fcf":               _safe(stmt["fcf_b"]),
         # ETF-specific
         "quote_type":        info.get("quoteType"),
         "expense_ratio":     _safe(round((info.get("annualReportExpenseRatio") or info.get("expenseRatio") or 0) * 100, 3))
@@ -4351,6 +4367,14 @@ def _company_cards(data: Optional[Dict[str, Dict[str, dict]]]) -> list[dict]:
                     "m": _safe(raw.get("Market Cap ($B)")),
                     "pe": _safe(raw.get("PE (TTM)")),
                     "y": _safe(raw.get("52W Return (%)")),
+                    # Growth, margins and EV multiples, short keys because the
+                    # page carries ~300 cards (data.statement_metrics).
+                    "rg": _safe(raw.get("Revenue Growth (%)")),
+                    "gm": _safe(raw.get("Gross Margin (%)")),
+                    "om": _safe(raw.get("Operating Margin (%)")),
+                    "fm": _safe(raw.get("FCF Margin (%)")),
+                    "es": _safe(raw.get("EV/Sales")),
+                    "ee": _safe(raw.get("EV/EBIT")),
                     "g": [],
                 }
             row["g"].append(group)

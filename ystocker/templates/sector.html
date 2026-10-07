@@ -466,6 +466,10 @@
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="eps_growth_q"><span data-i18n="th.eps_growth_q">EPS Gr Q</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
+                data-col="ev_sales" data-i18n-title="th.ev_sales_tip" title="Enterprise value over trailing revenue. For a listing priced in one currency and reporting in another, both are converted first."><span data-i18n="th.ev_sales">EV/Sales</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
+                data-col="ev_ebit" data-i18n-title="th.ev_ebit_tip" title="Enterprise value over operating income (EBIT). Blank for a loss, and for banks and insurers, whose debt is raw material rather than financing."><span data-i18n="th.ev_ebit">EV/EBIT</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
+            <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ev_ebitda"><span data-i18n="th.ev_ebitda">EV/EBITDA</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
             <th class="text-right py-2 px-3 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap"
                 data-col="ev"><span data-i18n="th.ev">EV ($B)</span> <span class="sort-icon ml-0.5">&#8597;</span></th>
@@ -477,6 +481,9 @@
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="short_float"><span data-i18n="th.short_float">Short %</span> <span class="sort-icon">↕</span></th>
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="div_yield"><span data-i18n="th.div_yield">Div Yield</span> <span class="sort-icon">↕</span></th>
             <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="rev_growth"><span data-i18n="th.rev_growth">Rev Growth</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="gross_margin"><span data-i18n="th.gross_margin">Gross Mgn</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="op_margin"><span data-i18n="th.op_margin">Op Mgn</span> <span class="sort-icon">↕</span></th>
+            <th class="text-right py-2 px-2 font-medium sortable cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition whitespace-nowrap" data-col="fcf_margin" data-i18n-title="th.fcf_margin_tip" title="Free cash flow over revenue, trailing twelve months."><span data-i18n="th.fcf_margin">FCF Mgn</span> <span class="sort-icon">↕</span></th>
           </tr>
         </thead>
         <tbody id="sectorTableBody"></tbody>
@@ -1219,6 +1226,13 @@ function avgLinePlugin(getAvg, fmt, color) {
     if(v==null) return fmtNull();
     return `<span class="text-slate-700 dark:text-slate-200">${v.toFixed(1)}x</span>`;
   }
+  /* A margin. Only a negative one is coloured: a column of green for every
+     company that makes any money at all would say nothing. */
+  function fmtMargin(v){
+    if(v==null) return fmtNull();
+    const col = v<0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-700 dark:text-slate-200';
+    return `<span class="${col}">${v.toFixed(1)}%</span>`;
+  }
   function fmtBillions(v){
     if(v==null) return fmtNull();
     return `<span class="text-slate-700 dark:text-slate-200">$${v.toFixed(1)}B</span>`;
@@ -1262,6 +1276,8 @@ function avgLinePlugin(getAvg, fmt, color) {
         <td class="py-2.5 px-3 text-right">${fmtPeg(d.peg)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_ttm)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtGrowth(d.eps_growth_q)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtEvEbitda(d.ev_sales)}</td>
+        <td class="py-2.5 px-3 text-right font-mono">${fmtEvEbitda(d.ev_ebit)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtEvEbitda(d.ev_ebitda)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtBillions(d.ev)}</td>
         <td class="py-2.5 px-3 text-right font-mono">${fmtBillions(d.ebitda)}</td>
@@ -1271,6 +1287,9 @@ function avgLinePlugin(getAvg, fmt, color) {
       <td class="py-2 px-2 text-right font-mono text-xs ${d.short_float != null ? (d.short_float > 15 ? 'text-rose-700 dark:text-rose-400' : d.short_float > 7 ? 'text-amber-700 dark:text-amber-400' : '') : 'text-slate-700'}">${d.short_float != null ? d.short_float.toFixed(1)+'%' : '—'}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.div_yield != null ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700'}">${d.div_yield != null ? d.div_yield.toFixed(2)+'%' : '—'}</td>
       <td class="py-2 px-2 text-right font-mono text-xs ${d.rev_growth != null ? (d.rev_growth > 15 ? 'text-emerald-700 dark:text-emerald-400' : d.rev_growth > 5 ? 'text-amber-700 dark:text-amber-400' : d.rev_growth > 0 ? 'text-slate-600 dark:text-slate-300' : 'text-rose-700 dark:text-rose-400') : 'text-slate-700'}">${d.rev_growth != null ? (d.rev_growth >= 0 ? '+' : '') + d.rev_growth.toFixed(1) + '%' : '—'}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs">${fmtMargin(d.gross_margin)}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs">${fmtMargin(d.op_margin)}</td>
+      <td class="py-2 px-2 text-right font-mono text-xs">${fmtMargin(d.fcf_margin)}</td>
       </tr>`).join('');
   }
 

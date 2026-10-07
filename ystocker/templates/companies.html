@@ -69,6 +69,14 @@
   }
   .co-chg.up { color: var(--co-up); background: var(--co-up-bg); }
   .co-chg.down { color: var(--co-down); background: var(--co-down-bg); }
+  /* Six figures under the name, three to a row. */
+  .co-stats {
+    grid-column: 2 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px 8px; margin-top: 2px; font-size: 10.5px; color: var(--t-ink-dim);
+  }
+  .co-stat { display: flex; justify-content: space-between; gap: 4px; min-width: 0; white-space: nowrap; }
+  .co-stat b { font-weight: 600; color: var(--t-ink); font-variant-numeric: tabular-nums; }
+  .co-stat b.neg { color: var(--co-down); }
   .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
              padding-right: 22px; min-height: 1.4em; }
   .co-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 0; }
@@ -126,6 +134,12 @@
       <option value="chg" data-i18n="companies.sort_chg">Best today first</option>
       <option value="pe" data-i18n="companies.sort_pe">Lowest P/E first</option>
       <option value="y52" data-i18n="companies.sort_y52">Best 52 weeks first</option>
+      <option value="rg" data-i18n="companies.sort_rg">Fastest revenue growth first</option>
+      <option value="gm" data-i18n="companies.sort_gm">Highest gross margin first</option>
+      <option value="om" data-i18n="companies.sort_om">Highest operating margin first</option>
+      <option value="fm" data-i18n="companies.sort_fm">Highest FCF margin first</option>
+      <option value="es" data-i18n="companies.sort_es">Lowest EV/Sales first</option>
+      <option value="ee" data-i18n="companies.sort_ee">Lowest EV/EBIT first</option>
       <option value="az" data-i18n="companies.sort_az">Ticker A–Z</option>
     </select>
   </div>
@@ -165,7 +179,9 @@
   const VIEWS = ['all', 'watch', 'followed', 'gainers', 'losers'];
   // sort key -> [row field, direction]; '' is the lists' own order (largest
   // first), 'az' is by ticker.
-  const SORTS = { chg: ['c', -1], pe: ['pe', 1], y52: ['y', -1] };
+  const SORTS = { chg: ['c', -1], pe: ['pe', 1], y52: ['y', -1],
+                  rg: ['rg', -1], gm: ['gm', -1], om: ['om', -1], fm: ['fm', -1],
+                  es: ['es', 1], ee: ['ee', 1] };
   // The view and the sort ride in the address, so a reload keeps them and a
   // link can open straight onto the Watchlist.
   const QS = new URLSearchParams(location.search);
@@ -313,8 +329,26 @@
       <span class="co-price">${typeof r.p === 'number' ? '$' + r.p.toFixed(2) : '—'}</span>
       <span class="co-name" title="${esc(name)}">${esc(name)}</span>
       ${chg}
+      ${stats(r)}
       <span class="co-foot">${esc(foot)}</span>
     </a>`;
+  }
+
+  /* Growth, margins and the EV multiples, a dash where Yahoo has nothing or
+     the figure would not mean anything (a loss's EV/EBIT, a bank's EV). */
+  const STATS = [
+    ['rg', 'companies.stat_rg', 'Rev gr', 'pct'], ['gm', 'companies.stat_gm', 'Gross', 'pct'],
+    ['om', 'companies.stat_om', 'Op', 'pct'], ['fm', 'companies.stat_fm', 'FCF', 'pct'],
+    ['es', 'companies.stat_es', 'EV/S', 'x'], ['ee', 'companies.stat_ee', 'EV/EBIT', 'x'],
+  ];
+  function stats(r) {
+    return `<span class="co-stats">${STATS.map(([k, key, label, kind]) => {
+      const v = r[k];
+      const has = typeof v === 'number' && isFinite(v);
+      const text = !has ? '—' : kind === 'x' ? v.toFixed(1) + '×'
+        : (k === 'rg' && v > 0 ? '+' : '') + v.toFixed(1) + '%';
+      return `<span class="co-stat"><span>${esc(tr(key, label))}</span><b class="${has && v < 0 ? 'neg' : ''}">${text}</b></span>`;
+    }).join('')}</span>`;
   }
 
   function render() {

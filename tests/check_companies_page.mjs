@@ -34,6 +34,13 @@ const eq = (label, got, want) => t(label, JSON.stringify(got) === JSON.stringify
   `got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
 
 // The page's inline script: the <script> block that follows watchlist.js.
+// The sort's options as the template lists them, so an option added there is
+// one the fake select accepts (a hand-kept list silently refused new ones).
+const SORT_OPTIONS = (() => {
+  const m = /<select id="coSort"[\s\S]*?<\/select>/.exec(tpl);
+  if (!m) throw new Error('#coSort not found in companies.html');
+  return [...m[0].matchAll(/<option value="([^"]*)"/g)].map(o => o[1]);
+})();
 const SCRIPT = (() => {
   const m = /watchlist\.js[^>]*><\/script>\s*<script>([\s\S]*?)<\/script>/.exec(tpl);
   if (!m) throw new Error('page script not found after watchlist.js in companies.html');
@@ -42,10 +49,15 @@ const SCRIPT = (() => {
 
 // Followed companies, as routes._company_cards builds them: largest first.
 const ROWS = [
-  { t: 'NVDA', n: 'NVIDIA', p: 180.1, c: 1.5, m: 4400, pe: 50.2, y: 40.1, g: ['Semis'] },
-  { t: 'MSFT', n: 'Microsoft', p: 510, c: -0.4, m: 3800, pe: 36.0, y: 20.0, g: ['Software'] },
-  { t: 'AAPL', n: 'Apple', p: 250, c: 0.0, m: 3700, pe: 33.0, y: -5.0, g: ['Hardware'] },
-  { t: 'INTC', n: 'Intel', p: 30, c: 3.2, m: 130, pe: -12.0, y: 55.0, g: ['Semis'] },
+  { t: 'NVDA', n: 'NVIDIA', p: 180.1, c: 1.5, m: 4400, pe: 50.2, y: 40.1, g: ['Semis'],
+    rg: 105.9, gm: 74.7, om: 66.2, fm: 13.8, es: 18.93, ee: 28.6 },
+  { t: 'MSFT', n: 'Microsoft', p: 510, c: -0.4, m: 3800, pe: 36.0, y: 20.0, g: ['Software'],
+    rg: 18.0, gm: 69.0, om: 45.0, fm: 25.0, es: 13.0, ee: 29.0 },
+  { t: 'AAPL', n: 'Apple', p: 250, c: 0.0, m: 3700, pe: 33.0, y: -5.0, g: ['Hardware'],
+    rg: 16.4, gm: 48.7, om: 32.6, fm: 23.1, es: 10.45, ee: 32.0 },
+  // A loss-maker: no EV/EBIT, and a negative FCF margin.
+  { t: 'INTC', n: 'Intel', p: 30, c: 3.2, m: 130, pe: -12.0, y: 55.0, g: ['Semis'],
+    rg: -2.0, gm: 38.9, om: -1.0, fm: -4.0, es: 3.0, ee: null },
   { t: 'QQQQ', n: 'No quote yet', p: null, c: null, m: 10, pe: null, y: null, g: ['Semis'] },
 ];
 // SEC's list, in SEC's order: [ticker, name, exchange, also].
@@ -108,7 +120,7 @@ async function load({ search = '', withWatchlist = true, stored = null, director
     coSearch: Object.assign(makeEl('coSearch'), { value: '' }),
     coGroup: makeSelect('coGroup', ['', 'Semis', 'Software', 'Hardware']),
     coExch: makeSelect('coExch', ['', 'NYSE', 'Nasdaq', 'CBOE', 'OTC']),
-    coSort: makeSelect('coSort', ['', 'chg', 'pe', 'y52', 'az']),
+    coSort: makeSelect('coSort', SORT_OPTIONS),
     coMeta: makeEl('coMeta'), coGrid: makeEl('coGrid'), coEmpty: makeEl('coEmpty'),
     coMore: makeEl('coMore'), coWatchN: makeEl('coWatchN'),
   };
@@ -236,6 +248,27 @@ console.log('sorting');
   eq('so the divider is still drawn once', p.dividers(), 1);
   p.sort('');
   eq('back to largest first', p.order().slice(0, 5), ['NVDA', 'MSFT', 'AAPL', 'INTC', 'QQQQ']);
+  p.sort('rg');
+  eq('fastest revenue growth first; no figure last', p.order().slice(0, 5), ['NVDA', 'MSFT', 'AAPL', 'INTC', 'QQQQ']);
+  p.sort('fm');
+  eq('highest FCF margin first', p.order().slice(0, 5), ['MSFT', 'AAPL', 'NVDA', 'INTC', 'QQQQ']);
+  p.sort('es');
+  eq('lowest EV/Sales first', p.order().slice(0, 5), ['INTC', 'AAPL', 'MSFT', 'NVDA', 'QQQQ']);
+  p.sort('ee');
+  eq('lowest EV/EBIT first; a loss has none and goes last with no quote',
+    p.order().slice(0, 5), ['NVDA', 'MSFT', 'AAPL', 'INTC', 'QQQQ']);
+  eq('the new sorts ride in the address too', p.urls[p.urls.length - 1], 'https://stock.li-family.us/companies?sort=ee');
+}
+
+console.log('the stats row');
+{
+  const p = await load();
+  await p.ready();
+  const html = p.els.coGrid.innerHTML;
+  eq('six stats on each quoted card, none on SEC\'s', (html.match(/class="co-stat"/g) || []).length, 5 * 6);
+  t('a figure is formatted', html.includes('<b class="">+105.9%</b>') && html.includes('<b class="">28.6×</b>'));
+  t('a negative margin is marked', html.includes('<b class="neg">-4.0%</b>'));
+  t('a missing multiple is a dash, not a zero', /EV\/EBIT<\/span><b class="">—<\/b>/.test(html));
 }
 
 console.log('gainers and losers are rankings of their own');
@@ -329,6 +362,9 @@ console.log('the strings the script composes exist in both languages');
   const keys = new Set([...SCRIPT.matchAll(/tr\('([\w.]+)'/g)].map(m => m[1]));
   for (const k of ['companies.watch', 'companies.sort', 'companies.sort_mcap', 'companies.sort_chg',
                    'companies.sort_pe', 'companies.sort_y52', 'companies.sort_az']) keys.add(k);
+  // The stats row and the new sorts name their keys in a table, not in tr('…').
+  for (const m of SCRIPT.matchAll(/'(companies\.stat_\w+)'/g)) keys.add(m[1]);
+  for (const k of ['rg', 'gm', 'om', 'fm', 'es', 'ee']) keys.add(`companies.sort_${k}`);
   const missing = [...keys].filter(k => !new RegExp(`'${k.replace(/\./g, '\\.')}':\\s*\\{\\s*en:\\s*'[^']+',\\s*zh:\\s*'[^']+'`).test(i18n));
   eq('every key has an en and a zh', missing, []);
 }

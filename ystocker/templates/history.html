@@ -6497,6 +6497,9 @@ async function explainChart(chartKey) {
     { key: 'roe', metrics: ['roe'], kind: 'pct', type: 'line', zero: true, colors: [VIOLET], noChange: true },
     { key: 'ocf', metrics: ['ocf'], kind: 'money', colors: [SKY] },
     { key: 'fcf', metrics: ['fcf'], kind: 'money', colors: [EMERALD] },
+    // Free cash flow over revenue, per view, worked out server-side (xbrl).
+    { key: 'fcf_margin', metrics: ['fcf_margin'], kind: 'pct', type: 'line', zero: true,
+      colors: [EMERALD], noChange: true },
     // Drawn below zero, as the cash it is leaving.
     { key: 'capex', metrics: ['capex'], kind: 'money', colors: [AMBER], negate: true },
     // Balances, not flows: two lines read better than eighty interleaved bars.
@@ -6509,6 +6512,9 @@ async function explainChart(chartKey) {
     { key: 'dps', metrics: ['dps'], kind: 'eps', colors: [VIOLET] },
     { key: 'pe', metrics: ['pe'], valuation: true, kind: 'x', colors: [AMBER] },
     { key: 'ps', metrics: ['ps'], valuation: true, kind: 'x', colors: [AMBER] },
+    // Market cap plus debt less cash, over TTM revenue and TTM operating income.
+    { key: 'ev_sales', metrics: ['ev_sales'], valuation: true, kind: 'x', colors: [AMBER] },
+    { key: 'ev_ebit', metrics: ['ev_ebit'], valuation: true, kind: 'x', colors: [AMBER] },
   ];
   const STORE_VIEW = 'ystocker_fund_view', STORE_RANGE = 'ystocker_fund_range';
   const POLL_MS = [1500, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 10000, 10000];
@@ -6711,11 +6717,15 @@ async function explainChart(chartKey) {
     if (card.valuation && newest !== undefined && typeof first[newest] !== 'number') {
       // The newest period has no multiple. Say why, rather than headline one
       // from a year ago: a P/E of 1,149 from last spring is not today's.
-      const eps = (view === 'annual' ? payload.annual.values.eps : payload.ttm.values.eps) || [];
-      const loss = card.key === 'pe' && typeof eps[newest] === 'number' && eps[newest] <= 0;
+      // P/E over a loss, or EV/EBIT over an operating loss, is not a measurement.
+      const base = { pe: 'eps', ev_ebit: 'operating_income' }[card.key];
+      const vals = base ? ((view === 'annual' ? payload.annual.values : payload.ttm.values)[base] || []) : [];
+      const loss = !!base && typeof vals[newest] === 'number' && vals[newest] <= 0;
       return { html: `<div class="fd-card-value">${loss ? 'n/m' : '—'}</div>`,
                meta: `${periodTitle(src, newest)} · ${loss
-                 ? tr('fund.pe_nm', 'not meaningful: trailing earnings are negative')
+                 ? (card.key === 'pe'
+                     ? tr('fund.pe_nm', 'not meaningful: trailing earnings are negative')
+                     : tr('fund.ev_ebit_nm', 'not meaningful: trailing operating income is negative'))
                  : tr('fund.na', 'not available for this period')}`,
                derived: '' };
     }
@@ -6861,6 +6871,8 @@ async function explainChart(chartKey) {
     (payload.notes || []).forEach(code => notes.push(tr('fund.note_' + code, '')));
     if (payload.stale) notes.push(tr('fund.note_stale', ''));
     if (anyCapped) notes.push(tr('fund.note_capped', ''));
+    if (payload.valuation) notes.push(tr('fund.note_ev', ''));
+    if (payload.valuation && payload.valuation.debt_assumed_zero) notes.push(tr('fund.note_ev_no_debt', ''));
     notes.push(tr('fund.note_disclaimer', ''));
     $('fundNotes').innerHTML = notes.filter(Boolean).map(n => `<li>${esc(n)}</li>`).join('');
   }

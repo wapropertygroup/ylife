@@ -1670,8 +1670,9 @@ next view. `CACHE_REV` is a build that carries something an older copy lacks but
 can be drawn without, such as a new metric: the old copy is still served and counts
 as stale, so it rebuilds in the background on its next view. It went to 2 with
 the four cards below. Before it, every ticker cached before that deploy drew
-them empty for up to the 12-hour TTL. An `unavailable` answer gains nothing
-from a new metric and is left alone.
+them empty for up to the 12-hour TTL. It went to 3 with FCF margin, EV/Sales and
+EV/EBIT (see "Growth, margins and EV multiples" below). An `unavailable` answer
+gains nothing from a new metric and is left alone.
 
 **`/companies` is the way in** ("Find your next move", after alphascope's
 `/dashboard`). Each company is a card with a monogram tile — no third-party logo
@@ -1783,6 +1784,79 @@ hermetic, including the suggestions and the compare row), `tests/test_directory.
 the template), `node tests/check_companies_page.mjs` (44, the page's own script
 against a fake DOM and the real watchlist.js) and `node tests/check_watchlist.mjs`
 (29). Not a DynamoDB table: every figure can be fetched again.
+
+### Growth, margins and EV multiples (`data.statement_metrics`)
+
+Asked for 2026-10-06: revenue growth, gross margin, operating margin, FCF
+margin, EV/Sales and EV/EBIT, on four surfaces (the reader picked all four):
+`/evaluation`'s stock table and every sector table, the `/companies` cards, the
+Fundamentals tab on `/history`, and the TradeAgents report.
+
+**One definition, in `data.statement_metrics`** (pure, tested on Yahoo's own
+payloads in `tests/test_data.py`):
+- **EBIT is operating income** (`operatingMargins` x revenue), the usual proxy
+  where no EBIT line is published.
+- **A loss has no EV/EBIT or EV/EBITDA.** Yahoo gave SNOW EV/EBITDA -115.7,
+  which sorted as the cheapest stock in the column.
+- **A negative EV is a figure, not a multiple.**
+- **A bank or an insurer has no EV multiple** (`EV_UNDEFINED_INDUSTRIES`: bank,
+  insurance, capital markets, the three dca.py sends to its bank template).
+  JPM read EV/EBIT 7.7 without this.
+- **A gross margin of exactly 0.0 is not reported.** Yahoo writes 0.0 for a
+  bank.
+
+**Yahoo mixes two currencies in `info`, and its EV ratios divide one by the
+other.** Prices, `marketCap` and `enterpriseValue` are in the listing's
+`currency`. `totalRevenue`, `ebitda`, `freeCashflow`, `totalDebt` and
+`totalCash` are in `financialCurrency`. For an ADR they differ. Measured on the
+box on 2026-10-06:
+- ASML read EV/Revenue 1,123 and EV/EBITDA 2,942;
+- TSM's EV was 17.7 trillion, neither a dollar nor a TWD figure;
+- TSM's EBITDA, FCF and the P/S fallback were TWD read as dollars, about 30x
+  off, and P/FCF (built on that FCF) with them.
+
+So where the currencies differ, EV is rebuilt from parts that can be converted:
+the cap at the quote's rate, plus debt less cash at the statements' rate
+(`statement_rates`). Where they agree, Yahoo's EV is kept, since it also counts
+minority interest, and every figure stays what it was. EV ($B), EBITDA ($B),
+FCF ($B), EV/EBITDA and P/S in the ticker record and in `/api/history` all go
+through it now, which fixed them for ADRs as well. Ratios need no FX for a
+listing that reports in its own currency, so a failed rate costs only the $B
+figures.
+
+The surfaces:
+- **`/evaluation`'s stock table** gained six columns, 18 in all, and scrolls
+  sideways at a laptop's width. The sector tables gained five (Rev Growth was
+  there already). Both have header tooltips saying how EV/EBIT and EV/Sales
+  are built. `node tests/check_evaluation_cashflow.mjs` pins the column parity.
+- **`/companies`** draws a row of six figures on each quoted card and offers
+  six more sorts, with a missing figure last either way.
+  `node tests/check_companies_page.mjs` reads the sort options from the template
+  now; its hand-kept list had silently refused the new ones.
+- **The Fundamentals tab** gained FCF margin (per view, in xbrl.py beside the
+  other margins) and EV/Sales and EV/EBIT cards. EV there is each quarter end's
+  market cap plus debt less cash, with cash excluding marketable securities as
+  the cash card does. A company that has never filed a debt line is taken to
+  have none (`debt_assumed_zero`, footnoted on the page). One that filed debt
+  before and not this quarter has no EV for it. Like P/E and P/S, these are
+  withheld for a foreign or a different-currency filer. `CACHE_REV` went to 3.
+- **The TradeAgents report**: Quality shows gross margin and revenue growth
+  (not scored, so the quality tier is unchanged). Valuation adds EV/Sales and
+  EV/EBIT to the tier: P/E band 0.20, PEG 0.20, P/B 0.15, EV/EBIT 0.15,
+  EV/Sales 0.10, forward-vs-trailing 0.10, dividend 0.10. A loss-maker's P/E is
+  missing, and EV/Sales is the multiple it still has: INTC's coverage went from
+  0.55 to 0.70 of the weight. The fork's adapter rebuilds EV on one currency
+  basis the same way (`fundamentals_evidence._enterprise_values`, TSM 16.57 on
+  both). It also labels the market cap in the listing's currency: TSM's dollar
+  cap had been tagged TWD.
+
+The ticker record carries the new fields from each ticker's next refresh, so
+the columns and cards fill in over a few hours after a deploy.
+
+Tests: `tests/test_data.py` (statement_metrics on TSM, ASML, JPM, SNOW, SPY and
+AAPL as Yahoo served them), `tests/test_xbrl.py` (FCF margin and EV on NVIDIA's
+filings, with its real operating income), the two Node harnesses above, and in
+the fork `tests/test_fundamentals_ev.py` and `tests/test_valuation_models.py`.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 

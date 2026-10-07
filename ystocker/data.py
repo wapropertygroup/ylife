@@ -219,7 +219,13 @@ def ps_ratio(info: dict) -> float | None:
     every ticker as of 2026-08 — which silently blanked P/S everywhere it was
     displayed. Fall back to marketCap / totalRevenue, which is the same ratio.
     Both are null for ETFs, so ETFs correctly stay None.
+
+    None for a listing quoted in one currency and reporting in another, where
+    the fallback would divide dollars by TWD: :func:`statement_metrics` converts
+    both sides instead.
     """
+    if not _same_currency(info):
+        return None
     ps = info.get("priceToSalesTrailingTwelveMonths")
     if ps:
         return round(ps, 2)
@@ -228,6 +234,143 @@ def ps_ratio(info: dict) -> float | None:
     if market_cap and revenue and revenue > 0:
         return round(market_cap / revenue, 2)
     return None
+
+
+def _same_currency(info: dict) -> bool:
+    """Whether the quote and the statements are in one currency.
+
+    A missing ``financialCurrency`` is taken as the listing's own, which is what
+    Yahoo omits it for.
+    """
+    quote = (info.get("currency") or "").strip().upper()
+    fin = (info.get("financialCurrency") or "").strip().upper()
+    return not fin or not quote or fin == quote
+
+
+def _num(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+# ---------------------------------------------------------------------------
+# Margins and EV multiples, on one currency basis
+# ---------------------------------------------------------------------------
+# Yahoo's `info` mixes two currencies and says so only in two fields. Prices,
+# `marketCap` and its own `enterpriseValue` are in the listing's `currency`;
+# everything off the statements (`totalRevenue`, `ebitda`, `freeCashflow`,
+# `totalDebt`, `totalCash`) is in `financialCurrency`. For a US listing of a US
+# filer they agree and nothing here matters. For an ADR they do not, and
+# Yahoo's own ratios are simply the two divided. Measured on the box on
+# 2026-10-06: ASML (USD/EUR) had an `enterpriseValue` of 39.7 trillion against a
+# $704B cap, so `enterpriseToRevenue` read 1,123 and `enterpriseToEbitda`
+# 2,942; TSM's (USD/TWD) EV was 17.7 trillion, neither a dollar nor a TWD
+# figure; BABA's added CNY debt to a USD cap. TSM's EBITDA and FCF were TWD
+# shown as dollars, 30x too large, and P/S and P/FCF built on them were 30x off
+# the other way. The same trap as TSM's P/E of 1.01 (listing.py), one field over.
+#
+# So for a listing whose currencies differ, EV is rebuilt from parts this file
+# can convert: the cap at the quote's rate, plus debt less cash at the
+# statements' rate. Where the currencies agree Yahoo's EV is kept, since it also
+# counts minority interest and preferred stock, and every figure stays what it
+# was. Gross margin, operating margin and FCF margin are ratios within one
+# currency and need no conversion at all.
+
+
+def statement_rates(info: dict) -> tuple[float | None, float | None]:
+    """:func:`usd_rate` for the listing's currency and for the statements'.
+
+    The second lookup is skipped when the two are one currency, which is every
+    listing but an ADR or a foreign line like it.
+    """
+    fx = usd_rate(info.get("currency"))
+    return fx, (fx if _same_currency(info) else usd_rate(info.get("financialCurrency")))
+
+
+#: Industries whose debt is raw material rather than financing (a bank's
+#: deposits, an insurer's float, a broker's client money), so enterprise value
+#: does not measure what an EV multiple assumes. The same three that dca.py sends
+#: to its bank template, which omits the standard DCF for the same reason. JPM
+#: read EV/EBIT 7.7 without this, a plausible number that means nothing.
+EV_UNDEFINED_INDUSTRIES: tuple[str, ...] = ("bank", "insurance", "capital markets")
+
+
+def statement_metrics(info: dict, fx_quote: float | None,
+                      fx_fin: float | None) -> dict[str, float | None]:
+    """Margins and EV multiples from Yahoo's ``info``, on one currency basis. Pure.
+
+    ``fx_quote`` and ``fx_fin`` are :func:`usd_rate` for the listing's currency
+    and for the statements'. Returns USD-billion figures (``ev_b``,
+    ``ebitda_b``, ``fcf_b``, ``revenue_b``), multiples (``ev_sales``,
+    ``ev_ebitda``, ``ev_ebit``, ``ps``) and margins in percent
+    (``gross_margin``, ``operating_margin``, ``fcf_margin``). A figure that
+    cannot be put on one basis is None, never a mixed-currency number.
+
+    Two rules beyond the currency:
+
+    - **EBIT is operating income** (``operatingMargins`` x revenue), the usual
+      proxy where no EBIT line is published, and a multiple of a loss is not a
+      multiple: EV/EBIT and EV/EBITDA are None when the earnings are at or
+      below zero, rather than a negative number that sorts as the cheapest.
+    - **A gross margin of exactly 0.0 is not reported.** Yahoo writes 0.0 for a
+      bank, which has no cost of goods (JPM, 2026-10-06), and no company sells
+      at precisely cost.
+    - **No EV multiple for a bank or an insurer** (:data:`EV_UNDEFINED_INDUSTRIES`).
+      The EV figure itself is still given.
+    """
+    same = _same_currency(info)
+    cap, ev_yahoo = _num(info.get("marketCap")), _num(info.get("enterpriseValue"))
+    revenue, ebitda = _num(info.get("totalRevenue")), _num(info.get("ebitda"))
+    fcf = _num(info.get("freeCashflow"))
+    debt, cash = _num(info.get("totalDebt")), _num(info.get("totalCash"))
+    gross, operating = _num(info.get("grossMargins")), _num(info.get("operatingMargins"))
+
+    def conv(value: float | None, rate: float | None) -> float | None:
+        return None if value is None or rate is None else value * rate
+
+    # One basis for the ratios: the listing's own currency when the statements
+    # share it, so a failed FX lookup costs only the $B figures; dollars when
+    # they do not, which takes both rates.
+    q_rate, f_rate = (1.0, 1.0) if same else (fx_quote, fx_fin)
+    cap_c, rev_c, ebitda_c = conv(cap, q_rate), conv(revenue, f_rate), conv(ebitda, f_rate)
+    if same:
+        ev_c = ev_yahoo
+    elif cap_c is not None and debt is not None and cash is not None and f_rate is not None:
+        ev_c = cap_c + (debt - cash) * f_rate
+    else:
+        ev_c = None
+    # A negative EV (more cash than the whole company is valued at) is shown as
+    # a figure, but a multiple of it reads as the cheapest stock on the page.
+    industry = str(info.get("industry") or "").lower()
+    ev_defined = not any(word in industry for word in EV_UNDEFINED_INDUSTRIES)
+    ev_pos = ev_c if ev_defined and ev_c is not None and ev_c > 0 else None
+    ebit_c = rev_c * operating if rev_c is not None and operating is not None else None
+
+    def ratio(top: float | None, bottom: float | None, digits: int) -> float | None:
+        if top is None or bottom is None or bottom <= 0:
+            return None
+        return round(top / bottom, digits)
+
+    def billions(value: float | None) -> float | None:
+        return None if value is None else round(value / 1e9, 1)
+
+    ps = _num(info.get("priceToSalesTrailingTwelveMonths")) if same else None
+    return {
+        # The basis is local currency or dollars; the quote's rate takes the
+        # first to dollars and leaves the second as it is.
+        "ev_b": billions(conv(ev_c, fx_quote if same else 1.0)),
+        "ebitda_b": billions(conv(ebitda, fx_fin)),
+        "fcf_b": billions(conv(fcf, fx_fin)),
+        "revenue_b": billions(conv(revenue, fx_fin)),
+        "ev_sales": ratio(ev_pos, rev_c, 2),
+        "ev_ebitda": ratio(ev_pos, ebitda_c, 1),
+        "ev_ebit": ratio(ev_pos, ebit_c, 1),
+        "ps": round(ps, 2) if ps else ratio(cap_c, rev_c, 2),
+        "gross_margin": round(gross * 100, 1) if gross else None,
+        "operating_margin": round(operating * 100, 1) if operating is not None else None,
+        "fcf_margin": (round(fcf / revenue * 100, 1)
+                       if fcf is not None and revenue is not None and revenue > 0 else None),
+    }
 
 
 # Yahoo's per-share earnings can sit on a different share basis from its price,
@@ -424,11 +567,15 @@ def fetch_ticker_data(ticker: str) -> dict:
     # them; for a JPY line it is ~0.0065, and None if the pair could not be
     # priced, which blanks those fields instead of shipping a 150x error.
     #
-    # Ratios are deliberately left alone: PE, PEG, EV/EBITDA, P/S, P/B, every
-    # growth and return percentage and `upside` above all divide one local
-    # figure by another, so the currency cancels and converting would be a
-    # second, opposite bug.
-    fx = usd_rate(info.get("currency"))
+    # Ratios are deliberately left alone: PE, PEG, P/B, every growth and return
+    # percentage and `upside` above all divide one local figure by another, so
+    # the currency cancels and converting would be a second, opposite bug. The
+    # EV multiples and P/S are the exception: their two halves come from
+    # different currencies on an ADR, so statement_metrics converts each half.
+    # The statements' own rate is a second lookup only for an ADR (TSM files in
+    # TWD). See statement_metrics.
+    fx, fx_fin = statement_rates(info)
+    stmt = statement_metrics(info, fx, fx_fin)
 
     def _usd(value: Any) -> float | None:
         """Price-like field in USD. A no-op on the USD path, deliberately.
@@ -467,12 +614,19 @@ def fetch_ticker_data(ticker: str) -> dict:
         "EPS Growth TTM (%)":  round(earnings_growth_ttm * 100, 1) if earnings_growth_ttm is not None else None,
         "EPS Growth Q (%)":    round(earnings_growth_q   * 100, 1) if earnings_growth_q   is not None else None,
         "Day Change (%)":      day_chg_pct,
-        "EV/EBITDA":           round(info.get("enterpriseToEbitda"), 1) if info.get("enterpriseToEbitda") is not None else None,
-        "EV ($B)":             _usd_b(info.get("enterpriseValue")),
-        "EBITDA ($B)":         _usd_b(info.get("ebitda")),
-        "P/S Ratio":          ps_ratio(info),
+        # Every EV figure and every statement figure on one currency basis, so
+        # an ADR's EBITDA is not its TWD number headed "$B". See statement_metrics.
+        "EV/EBITDA":           stmt["ev_ebitda"],
+        "EV ($B)":             stmt["ev_b"],
+        "EBITDA ($B)":         stmt["ebitda_b"],
+        "P/S Ratio":          stmt["ps"],
         "P/B Ratio":          round(info.get("priceToBook"), 2) if info.get("priceToBook") else None,
-        "FCF ($B)":           _usd_b(info.get("freeCashflow")),
+        "FCF ($B)":           stmt["fcf_b"],
+        "EV/Sales":           stmt["ev_sales"],
+        "EV/EBIT":            stmt["ev_ebit"],
+        "Gross Margin (%)":   stmt["gross_margin"],
+        "Operating Margin (%)": stmt["operating_margin"],
+        "FCF Margin (%)":     stmt["fcf_margin"],
         "Short Float (%)":    round(info.get("shortPercentOfFloat") * 100, 1) if info.get("shortPercentOfFloat") else None,
         "Dividend Yield (%)": dividend_yield_pct(info, current_price),
         "Revenue Growth (%)": round(info.get("revenueGrowth") * 100, 1) if info.get("revenueGrowth") else None,

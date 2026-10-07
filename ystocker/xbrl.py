@@ -698,7 +698,8 @@ FLOW_METRICS = ("revenue", "gross_profit", "operating_income", "net_income", "ep
 POINT_METRICS = ("shares", "cash", "debt", "equity")
 #: Computed from the lines above, per view: margins, return on equity and
 #: revenue growth on a year earlier.
-RATIO_METRICS = ("gross_margin", "operating_margin", "net_margin", "roe", "revenue_yoy")
+RATIO_METRICS = ("gross_margin", "operating_margin", "net_margin", "fcf_margin", "roe",
+                 "revenue_yoy")
 METRICS = FLOW_METRICS + POINT_METRICS + RATIO_METRICS
 #: Rounded to 4 decimals, not to the unit: $0.01 a quarter is NVIDIA's dividend.
 PER_SHARE_METRICS = ("eps", "dps")
@@ -1082,7 +1083,7 @@ def return_on_equity(ends: Sequence[date], income: Sequence[Optional[float]],
 def _add_margins(values: dict[str, list[Optional[float]]]) -> None:
     rev = values["revenue"]
     for name, line in (("gross_margin", "gross_profit"), ("operating_margin", "operating_income"),
-                       ("net_margin", "net_income")):
+                       ("net_margin", "net_income"), ("fcf_margin", "fcf")):
         values[name] = [_round(name, _ratio(x, r)) for x, r in zip(values[line], rev)]
 
 
@@ -1109,15 +1110,34 @@ def _view_block(series: Mapping[str, Mapping[date, Point]], ends: Sequence[date]
 
 def _valuation(ends: Sequence[date], ttm: Mapping[str, Sequence[Optional[float]]],
                prices: Sequence[tuple[date, float]]) -> dict[str, Any]:
-    """P/E and P/S at each quarter end, on trailing-twelve-month figures.
+    """P/E, P/S, EV/Sales and EV/EBIT at each quarter end, on trailing figures.
 
     The share count is that quarter's diluted weighted average, the same basis
-    the EPS was struck on, so the two ratios describe one company at one
-    moment. A non-positive TTM EPS gives no P/E at all: a negative multiple is
-    not a cheap one, it is not a measurement.
+    the EPS was struck on, so the ratios describe one company at one moment. A
+    non-positive TTM EPS gives no P/E at all, and a non-positive TTM operating
+    income no EV/EBIT: a negative multiple is not a cheap one, it is not a
+    measurement.
+
+    Enterprise value is that market cap plus debt less cash, both as of the
+    quarter end. Cash excludes marketable securities, as the cash line here
+    always has, so EV errs high for a company holding treasuries. A company
+    that has never filed a debt line is taken to have none
+    (``debt_assumed_zero``); one that filed debt before and not this quarter
+    has no EV for it, since an untagged line is not a repaid one.
     """
     prices = sorted(prices)
-    price, pe, ps, cap = [], [], [], []
+    debt_line = any(v is not None for v in ttm.get("debt", []))
+
+    def enterprise(i: int, mcap: Optional[float]) -> Optional[float]:
+        cash, debt = ttm["cash"][i], ttm["debt"][i]
+        if mcap is None or cash is None or (debt is None and debt_line):
+            return None
+        return mcap + (debt or 0.0) - cash
+
+    def over(ev: Optional[float], base: Optional[float]) -> Optional[float]:
+        return round(ev / base, 2) if ev and ev > 0 and base and base > 0 else None
+
+    price, pe, ps, cap, evs, ev_sales, ev_ebit = [], [], [], [], [], [], []
     for i, end in enumerate(ends):
         p = price_on(prices, end)
         eps, rev, shares = ttm["eps"][i], ttm["revenue"][i], ttm["shares"][i]
@@ -1126,6 +1146,10 @@ def _valuation(ends: Sequence[date], ttm: Mapping[str, Sequence[Optional[float]]
         mcap = p * shares if p and shares and shares > 0 else None
         cap.append(None if mcap is None else float(round(mcap)))
         ps.append(round(mcap / rev, 2) if mcap and rev and rev > 0 else None)
+        ev = enterprise(i, mcap)
+        evs.append(None if ev is None else float(round(ev)))
+        ev_sales.append(over(ev, rev))
+        ev_ebit.append(over(ev, ttm["operating_income"][i]))
 
     now = None
     if prices:
@@ -1135,9 +1159,15 @@ def _valuation(ends: Sequence[date], ttm: Mapping[str, Sequence[Optional[float]]
         if last is not None and close > 0:
             eps, rev, shares = ttm["eps"][last], ttm["revenue"][last], ttm["shares"][last]
             mcap = close * shares if shares and shares > 0 else None
+            ev = enterprise(last, mcap)
             now = {"date": day.isoformat(), "price": round(close, 2),
                    "pe": round(close / eps, 2) if eps and eps > 0 else None,
                    "ps": round(mcap / rev, 2) if mcap and rev and rev > 0 else None,
+                   "ev_sales": over(ev, rev),
+                   "ev_ebit": over(ev, ttm["operating_income"][last]),
                    "market_cap": None if mcap is None else float(round(mcap)),
+                   "ev": None if ev is None else float(round(ev)),
                    "basis_end": ends[last].isoformat()}
-    return {"price": price, "pe": pe, "ps": ps, "market_cap": cap, "now": now}
+    return {"price": price, "pe": pe, "ps": ps, "market_cap": cap, "ev": evs,
+            "ev_sales": ev_sales, "ev_ebit": ev_ebit, "debt_assumed_zero": not debt_line,
+            "now": now}
