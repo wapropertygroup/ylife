@@ -3,8 +3,6 @@
 {% block title %}yStocker — Ticker Lookup{% endblock %}
 
 {% block content %}
-<script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
-
 <div class="mb-8 fade-up">
   <h1 class="text-3xl font-bold grad-text mb-1" data-i18n="lookup.title">Ticker Lookup</h1>
   <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="lookup.subtitle">Search any stock symbol for instant valuation metrics, or discover tickers by sector.</p>
@@ -19,12 +17,12 @@
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 fade-up">
       <h2 class="text-base font-semibold text-slate-700 dark:text-slate-200 mb-4" data-i18n="lookup.search_title">Search a Ticker</h2>
       <div id="watchlistPanel" class="mb-3 hidden">
-        <p class="text-[10px] text-slate-500 dark:text-slate-600 uppercase tracking-widest mb-2">⭐ Watchlist</p>
+        <p class="text-[10px] text-slate-500 dark:text-slate-600 uppercase tracking-widest mb-2" data-i18n="companies.watch">★ Watchlist</p>
         <div id="watchlistChips" class="flex flex-wrap gap-1.5 mb-1"></div>
         <button id="clearWatchlistBtn" onclick="_clearWatchlist()" class="text-[10px] text-slate-700 hover:text-slate-500">clear all</button>
       </div>
       <div id="recentlySearched" class="mb-3 hidden">
-        <p class="text-[10px] text-slate-500 dark:text-slate-600 uppercase tracking-widest mb-2">Recent</p>
+        <p class="text-[10px] text-slate-500 dark:text-slate-600 uppercase tracking-widest mb-2" data-i18n="nav.search_recent">Recently viewed</p>
         <div id="recentChips" class="flex flex-wrap gap-1.5"></div>
       </div>
       <div class="flex gap-3">
@@ -250,32 +248,6 @@ function fmtPeg(v){
   return v.toFixed(2) + (v<1?' '+(I18n.t('lookup.cheap')||'✓ cheap'):v<2?' '+(I18n.t('lookup.fair')||'fair'):' '+(I18n.t('lookup.rich')||'rich'));
 }
 
-// ── Recently searched (localStorage)
-const RECENT_KEY = 'ystocker_recent_tickers';
-function _getRecent() {
-  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch(e) { return []; }
-}
-function _addRecent(ticker, name) {
-  let arr = _getRecent().filter(t => t.ticker !== ticker);
-  arr.unshift({ticker, name: name || ticker});
-  arr = arr.slice(0, 6);
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr)); } catch(e) {}
-  _renderRecent();
-}
-function _renderRecent() {
-  const arr = _getRecent();
-  const container = document.getElementById('recentlySearched');
-  const chips = document.getElementById('recentChips');
-  if (!container || !chips || !arr.length) { container?.classList.add('hidden'); return; }
-  container.classList.remove('hidden');
-  chips.innerHTML = arr.map(t => `
-    <button onclick="quickLookup('${t.ticker}')"
-      class="text-xs px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 text-brand font-medium transition">
-      ${t.ticker} <span class="text-slate-500 font-normal text-[10px]">${t.name}</span>
-    </button>`).join('');
-}
-_renderRecent();
-
 // The list itself is static/watchlist.js -- the same one the stars on
 // /companies and on every /history page keep, which is why it is no longer
 // capped at 12 here (that cap silently dropped picks starred elsewhere). The
@@ -324,6 +296,34 @@ document.getElementById('watchlistChips')?.addEventListener('click', e => {
 document.addEventListener('watchlist:change', _renderWatchlist);
 document.addEventListener('i18n:langchange', _renderWatchlist);
 _renderWatchlist();
+
+// ── Recently viewed: static/watchlist.js's second list, which every stock page
+// adds itself to as it loads, and a lookup here does too. It was this page's own
+// "recently searched" list, copied into the header search and /dca in two
+// shapes; /dca's bare strings came out here as "undefined" chips.
+const RECENT_SHOWN = 8;
+function _addRecent(ticker, name) { if (window.RecentTickers) RecentTickers.add(ticker, name); }
+function _renderRecent() {
+  const arr = window.RecentTickers ? RecentTickers.list().slice(0, RECENT_SHOWN) : [];
+  const container = document.getElementById('recentlySearched');
+  const chips = document.getElementById('recentChips');
+  if (!container || !chips) return;
+  if (!arr.length) { container.classList.add('hidden'); return; }
+  container.classList.remove('hidden');
+  // Escaped, and the ticker passed through a data attribute, as on the
+  // watchlist's chips: names arrive from whichever page recorded them.
+  chips.innerHTML = arr.map(t => `
+    <button type="button" data-recent-open="${_wlEsc(t.ticker)}"
+      class="text-xs px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 text-brand font-medium transition">
+      ${_wlEsc(t.ticker)}${t.name && t.name !== t.ticker ? ` <span class="text-slate-500 font-normal text-[10px]">${_wlEsc(t.name)}</span>` : ''}
+    </button>`).join('');
+}
+document.getElementById('recentChips')?.addEventListener('click', e => {
+  const open = e.target.closest('[data-recent-open]');
+  if (open) quickLookup(open.dataset.recentOpen);
+});
+document.addEventListener('recent:change', _renderRecent);
+_renderRecent();
 
 // ── Single ticker lookup
 async function lookupTicker(symbolOverride) {

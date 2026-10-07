@@ -1,6 +1,6 @@
 /**
  * Behaviour tests for the /companies page script (templates/companies.html):
- * the sort, the Watchlist view and the star on every card.
+ * the sort, the Watchlist and Recently viewed views, and the star on every card.
  *
  * Each of these fails as a plausible page, not an error:
  * - a sort that interleaves the quoted companies with SEC's list draws the
@@ -8,7 +8,9 @@
  * - a loss-making company sorted "lowest P/E first" heads the list as the
  *   cheapest stock there is;
  * - a starred ticker that is in neither list just vanishes from the
- *   Watchlist, with no card to open or unstar.
+ *   Watchlist, with no card to open or unstar;
+ * - Recently viewed sorted by size, or cut by dividers, stops being the order
+ *   the reader looked at things in.
  * So this runs the page's own script, extracted from the template rather than
  * copied (a copy agrees on the day it is written and drifts after), against a
  * small fake DOM and the real static/watchlist.js.
@@ -33,7 +35,8 @@ const t = (label, cond, detail = '') => {
 const eq = (label, got, want) => t(label, JSON.stringify(got) === JSON.stringify(want),
   `got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
 
-// The page's inline script: the <script> block that follows watchlist.js.
+// The page's inline script: the <script> block that declares ROWS. (It used to
+// follow the page's own watchlist.js tag; base.html loads that now.)
 // The sort's options as the template lists them, so an option added there is
 // one the fake select accepts (a hand-kept list silently refused new ones).
 const SORT_OPTIONS = (() => {
@@ -42,8 +45,9 @@ const SORT_OPTIONS = (() => {
   return [...m[0].matchAll(/<option value="([^"]*)"/g)].map(o => o[1]);
 })();
 const SCRIPT = (() => {
-  const m = /watchlist\.js[^>]*><\/script>\s*<script>([\s\S]*?)<\/script>/.exec(tpl);
-  if (!m) throw new Error('page script not found after watchlist.js in companies.html');
+  const m = [...tpl.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .find(x => x[1].includes('const ROWS = {{ companies | tojson }}'));
+  if (!m) throw new Error('page script (const ROWS = …) not found in companies.html');
   return m[1];
 })();
 
@@ -74,6 +78,8 @@ const STRINGS = {
   'companies.star_add': 'Add to watchlist',
   'companies.star_remove': 'Remove from watchlist',
   'companies.watch_local': 'kept in this browser',
+  'companies.recent_empty': 'RECENT-EMPTY',
+  'companies.recent_local': 'newest first here',
 };
 
 function makeEl(id, extra = {}) {
@@ -115,7 +121,8 @@ function makeSelect(id, options) {
 const unesc = s => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<')
   .replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-async function load({ search = '', withWatchlist = true, stored = null, directory = DIRECTORY } = {}) {
+async function load({ search = '', withWatchlist = true, stored = null, recent = null,
+                      withRecent = true, directory = DIRECTORY } = {}) {
   const els = {
     coSearch: Object.assign(makeEl('coSearch'), { value: '' }),
     coGroup: makeSelect('coGroup', ['', 'Semis', 'Software', 'Hardware']),
@@ -123,8 +130,9 @@ async function load({ search = '', withWatchlist = true, stored = null, director
     coSort: makeSelect('coSort', SORT_OPTIONS),
     coMeta: makeEl('coMeta'), coGrid: makeEl('coGrid'), coEmpty: makeEl('coEmpty'),
     coMore: makeEl('coMore'), coWatchN: makeEl('coWatchN'),
+    coRecentN: makeEl('coRecentN'), coClear: Object.assign(makeEl('coClear'), { hidden: true }),
   };
-  const chips = ['all', 'watch', 'followed', 'gainers', 'losers'].map(v => {
+  const chips = ['all', 'watch', 'recent', 'followed', 'gainers', 'losers'].map(v => {
     const c = makeEl(null);
     c.dataset.coView = v;
     c.closest = sel => (sel === '[data-co-view]' ? c : null);
@@ -168,12 +176,19 @@ async function load({ search = '', withWatchlist = true, stored = null, director
     dispatchEvent(ev) { (docListeners[ev.type] || []).forEach(fn => fn(ev)); },
   };
   const storage = {
-    data: stored ? { ystocker_watchlist: JSON.stringify(stored) } : {},
+    data: {
+      ...(stored ? { ystocker_watchlist: JSON.stringify(stored) } : {}),
+      ...(recent ? { ystocker_recent_tickers: JSON.stringify(recent) } : {}),
+    },
     getItem(k) { return k in this.data ? this.data[k] : null; },
     setItem(k, v) { this.data[k] = String(v); },
   };
   const watchlist = withWatchlist
     ? W.create(storage, list => document.dispatchEvent({ type: 'watchlist:change', detail: { list } }))
+    : undefined;
+  const recentTickers = withRecent
+    ? W.create(storage, list => document.dispatchEvent({ type: 'recent:change', detail: { list } }),
+               { key: W.RECENT_KEY, max: W.RECENT_MAX })
     : undefined;
   const href = `https://stock.li-family.us/companies${search}`;
   const urls = [];
@@ -191,14 +206,14 @@ async function load({ search = '', withWatchlist = true, stored = null, director
       return { status: 200, json: async () => ({ companies: directory, as_of: '2026-10-04T00:00:00Z' }) };
     },
   };
-  ctx.window = { Watchlist: watchlist, CT: undefined };
+  ctx.window = { Watchlist: watchlist, RecentTickers: recentTickers, CT: undefined };
   const code = SCRIPT
     .replace('{{ companies | tojson }}', JSON.stringify(ROWS))
     .replace('{{ updated | tojson }}', 'null')
     .replace('{{ warming | tojson }}', 'false');
   vm.runInContext(code, vm.createContext(ctx));
   const page = {
-    els, chips, urls, watchlist, storage, stars,
+    els, chips, urls, watchlist, recentTickers, storage, stars,
     async ready() { release(); for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0)); },
     order: () => [...els.coGrid.innerHTML.matchAll(/<span class="co-ticker">([^<]*)<\/span>/g)].map(m => m[1]),
     dividers: () => (els.coGrid.innerHTML.match(/class="co-divider"/g) || []).length,
@@ -352,6 +367,58 @@ console.log('a starred ticker in neither list');
   eq('so it can be unstarred', p.order(), ['AAPL']);
 }
 
+console.log('Recently viewed');
+{
+  // As /history recorded them, newest first: a company from SEC's list, a
+  // followed one, a listing in neither, and a followed one again.
+  const recent = [{ ticker: 'ACME', name: 'Acme Inc' }, 'MSFT', { ticker: '7203.T', name: 'Toyota Motor' }, 'NVDA'];
+  const p = await load({ search: '?view=recent&sort=az', recent });
+  t('opens on Recently viewed from the address',
+    p.chips.filter(c => c.classList.contains('is-on')).map(c => c.dataset.coView).join() === 'recent');
+  eq('before SEC\'s list answers, only the cards it does not wait on', p.order(), ['MSFT', 'NVDA']);
+  await p.ready();
+  eq('then every one, in the order viewed, whatever the sort says', p.order(), ['ACME', 'MSFT', '7203.T', 'NVDA']);
+  eq('no divider: quoted and unquoted cards mix in that order', p.dividers(), 0);
+  t('the sort is hidden here', p.els.coSort.hidden === true);
+  eq('the chip counts the history', p.els.coRecentN.textContent, '4');
+  t('the meta line says how the list is kept', p.els.coMeta.textContent.includes('newest first here'));
+  t('the listing in neither list links to its page, named from the history',
+    p.els.coGrid.innerHTML.includes('/history/7203.T?tab=fundamentals') && p.els.coGrid.innerHTML.includes('Toyota Motor'));
+  eq('a star on every card here too', p.stars().length, 4);
+  p.star('ACME');
+  eq('and it stars as anywhere else', p.watchlist.tickers(), ['ACME']);
+  eq('the order is unchanged by a star', p.order(), ['ACME', 'MSFT', '7203.T', 'NVDA']);
+  p.els.coSearch.value = 'micro';
+  p.els.coSearch.fire('input');
+  eq('the search box narrows it', p.order(), ['MSFT']);
+  p.els.coSearch.value = '';
+  p.els.coSearch.fire('input');
+  t('the clear button shows on this view', p.els.coClear.hidden === false);
+  p.els.coClear.fire('click');
+  eq('Clear history empties it', p.recentTickers.list(), []);
+  eq('and says how it fills', [p.els.coEmpty.hidden, p.els.coEmpty.textContent], [false, 'RECENT-EMPTY']);
+  t('the count and the button go with it', p.els.coRecentN.textContent === '' && p.els.coClear.hidden === true);
+  eq('the watchlist is untouched', p.watchlist.tickers(), ['ACME']);
+}
+{
+  const p = await load({ recent: ['MSFT'] });
+  await p.ready();
+  t('the clear button stays off other views', p.els.coClear.hidden === true);
+  p.recentTickers.add('ZETA', 'Zeta Global');   // a stock page opened in another tab
+  eq('a view recorded elsewhere updates the count', p.els.coRecentN.textContent, '2');
+  p.chip('recent');
+  eq('and the view, newest first', p.order(), ['ZETA', 'MSFT']);
+  eq('it rides in the address', p.urls[p.urls.length - 1], 'https://stock.li-family.us/companies?view=recent');
+  p.recentTickers.add('BETA');
+  eq('while on it, a new view is drawn at once', p.order(), ['BETA', 'ZETA', 'MSFT']);
+}
+{
+  const p = await load({ search: '?view=recent', withRecent: false });
+  await p.ready();
+  t('without the list, its chip is hidden', p.chips.find(c => c.dataset.coView === 'recent').hidden === true);
+  eq('and a link to it opens All instead', p.order().length, 8);
+}
+
 console.log('another tab');
 {
   const p = await load();
@@ -385,7 +452,8 @@ console.log('the strings the script composes exist in both languages');
   const i18n = readFileSync(path.join(root, 'ystocker/static/i18n.js'), 'utf8');
   const keys = new Set([...SCRIPT.matchAll(/tr\('([\w.]+)'/g)].map(m => m[1]));
   for (const k of ['companies.watch', 'companies.sort', 'companies.sort_mcap', 'companies.sort_chg',
-                   'companies.sort_pe', 'companies.sort_y52', 'companies.sort_az']) keys.add(k);
+                   'companies.sort_pe', 'companies.sort_y52', 'companies.sort_az',
+                   'companies.recent', 'companies.recent_clear']) keys.add(k);
   // The stats row and the new sorts name their keys in a table, not in tr('…').
   for (const m of SCRIPT.matchAll(/'(companies\.stat_\w+)'/g)) keys.add(m[1]);
   for (const k of ['rg', 'gm', 'om', 'fm', 'es', 'ee']) keys.add(`companies.sort_${k}`);

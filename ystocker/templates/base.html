@@ -383,6 +383,12 @@
        it. -->
   <script src="{{ url_for('static', filename='deferload.js') }}?v={{ cache_bust or 'dev' }}"></script>
 
+  <!-- The reader's watchlist and recently viewed stocks (window.Watchlist,
+       window.RecentTickers). Blocking for the same reason: /companies, /history
+       and /lookup read them during their parse, and the header search shows
+       both on every page. -->
+  <script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
+
   {% if _agents_floating %}
   <link rel="stylesheet" href="{{ url_for('static', filename='agents_float.css') }}?v={{ cache_bust or 'dev' }}">
   {% endif %}

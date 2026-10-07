@@ -798,6 +798,11 @@
              font-weight: 600; color: var(--ag-ink); }
 .ag-sym-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .ag-sym-ex { margin-left: auto; padding-left: 8px; font-size: 11px; opacity: .75; }
+/* The quick list's "★ Watchlist" and "Recently viewed" headings. */
+.ag-sym-head {
+  padding: 7px 10px 3px; font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ag-ink-muted); cursor: default;
+}
 /* The listings offered when a ticker was refused, inside #agError. */
 .ag-sym-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ag-sym-chip {
@@ -2351,7 +2356,8 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   }
   function symMark(i) {
     symActive = i;
-    [...symList.children].forEach((li, j) => {
+    // Options only: the quick list's headings sit between them.
+    symList.querySelectorAll('[role="option"]').forEach((li, j) => {
       li.classList.toggle('is-active', j === i);
       li.setAttribute('aria-selected', j === i ? 'true' : 'false');
     });
@@ -2365,12 +2371,23 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     symClose();
     clearErr();
   }
+  // An item {head: label} is a heading, drawn but never picked or counted.
   function symDraw(items) {
-    if (!items.length || document.activeElement !== tickerEl) { symClose(); return; }
-    symItems = items;
+    const opts = items.filter(it => !it.head);
+    if (!opts.length || document.activeElement !== tickerEl) { symClose(); return; }
+    symItems = opts;
     symList.textContent = '';
-    items.forEach((it, i) => {
+    let n = 0;
+    items.forEach(it => {
       const li = document.createElement('li');
+      if (it.head) {
+        li.className = 'ag-sym-head';
+        li.setAttribute('role', 'presentation');
+        li.textContent = it.head;
+        symList.appendChild(li);
+        return;
+      }
+      const i = n++;
       li.id = 'agTickerOpt' + i;
       li.className = 'ag-sym-opt';
       li.setAttribute('role', 'option');
@@ -2399,11 +2416,38 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       if (seq === symSeq) symDraw(d.results || []);
     } catch (_) { /* a convenience: typing a symbol still works without it */ }
   }
+  // Before anything is typed, and once the box is emptied, the list offers
+  // the reader's watchlist and recently viewed stocks (static/watchlist.js),
+  // as the header search does: only symbols a run accepts (no index, no
+  // 7203.T), and a watchlisted stock is not offered twice.
+  const QUICK_SHOWN = 5;
+  let symTyped = false;
+  function symQuick() {
+    const ok = w => TICKER_SHAPE.test(w.ticker);
+    const named = w => {
+      const nm = w.name !== w.ticker ? w.name : '';
+      const shown = I18n.stockName ? I18n.stockName(w.ticker, nm) : nm;
+      return { ticker: w.ticker, name: shown === w.ticker ? '' : shown, exchange: '' };
+    };
+    const saved = (window.Watchlist ? Watchlist.list() : []).filter(ok).slice(0, QUICK_SHOWN);
+    const seen = new Set(saved.map(w => w.ticker));
+    const recent = (window.RecentTickers ? RecentTickers.list() : [])
+      .filter(w => ok(w) && !seen.has(w.ticker)).slice(0, QUICK_SHOWN);
+    const items = [];
+    if (saved.length) items.push({ head: I18n.t('nav.search_saved') || '★ Watchlist' }, ...saved.map(named));
+    if (recent.length) items.push({ head: I18n.t('nav.search_recent') || 'Recently viewed' }, ...recent.map(named));
+    symDraw(items);
+  }
+  const symQuickDue = () => !symTyped || !tickerEl.value.trim();
   if (tickerEl && symList) {
+    tickerEl.addEventListener('focus', () => { if (symQuickDue()) symQuick(); });
+    // Focused already (the list closed with Esc or a pick): a click reopens it.
+    tickerEl.addEventListener('click', () => { if (symList.hidden && symQuickDue()) symQuick(); });
     tickerEl.addEventListener('input', () => {
       clearTimeout(symTimer);
+      symTyped = true;
       const q = tickerEl.value.trim();
-      if (!q) { symSeq++; symClose(); return; }
+      if (!q) { symSeq++; symQuick(); return; }
       symTimer = setTimeout(() => symFetch(q), 180);
     });
     tickerEl.addEventListener('keydown', e => {

@@ -1767,6 +1767,35 @@ carries over. /history's header carries the same star.
 - **Markup.** The star sits beside the card's link in a `.co-cell`, not inside
   it: a button inside an `<a>` is invalid, and its click would follow the link.
 
+**Saved and recently viewed, on every page (2026-10-07).** Asked for: "增加保存的
+股票？ 最近浏览的股票？". `watchlist.js` now holds two lists, `window.Watchlist`
+and `window.RecentTickers`, and base.html loads it once, in `<head>`, for every
+page. Recently viewed keeps /lookup's old "recently searched" key
+(`ystocker_recent_tickers`), 24 entries, newest first.
+- **Where they show.** The header search's empty box, on both hosts and in the
+  phone menu, lists five of each with "All N →" to /companies. /companies has a
+  Recently viewed view (`?view=recent`): in the order viewed, so the sort hides
+  as on Gainers, with no divider and a Clear history button. The /agents ticker
+  box offers both before anything is typed, only symbols a run accepts. The
+  star on /history is labelled (☆ Watchlist / ★ Watching): a bare ☆ beside the
+  🔗 did not read as the way to save a stock.
+- **Who writes.** /history adds itself once its data has loaded, so a mistyped
+  symbol, whose page has nothing to show, is never kept. /lookup adds the card it
+  draws. Nothing records at navigation: the header search used to, typos included.
+- **What it replaced.** Three copies of that list in two shapes. /dca wrote bare
+  strings and dropped the others' `{ticker, name}` records on its next write;
+  /lookup drew a bare string as an "undefined" chip. `clean()` reads both.
+- **Clear stops propagation.** Its redraw detaches the button, and the
+  document's outside-click listener then shut the panel on the reader.
+- **The header search's classes are checked against the compiled bundle.** `pt-1`
+  is not in it. A lookup for `.pt-1` matches `.pt-1\.5`, which is how it first
+  passed.
+
+Tests: `node tests/check_navsearch.mjs` (45, the real i18n.js, watchlist.js and
+navsearch.js in one vm), `node tests/check_agents_ticker_quick.mjs` (24, the
+block cut from agents.html), and `check_watchlist.mjs` (who writes, and the
+single load), `check_companies_page.mjs` and `check_dca_row_cells.mjs`.
+
 **Comparing companies (2026-10-06).** Asked for: "support to add another
 several companies to compare". A row under the tab's header adds up to four
 others, five companies in all. They come from the add box, whose suggestions

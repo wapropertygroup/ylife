@@ -67,7 +67,13 @@ const I18n = (() => {
     // ── Banner ticker search (navsearch.js) ────────────────────────────
     'nav.search_ph':      { en: 'Ticker, e.g. AAPL', zh: '股票代码，如 AAPL' },
     'nav.search_symbol':  { en: 'Search this symbol', zh: '搜索该代码' },
-    'nav.search_recent':  { en: 'Recent', zh: '最近搜索' },
+    // With nothing typed: the watchlist, then recently viewed (static/watchlist.js).
+    'nav.search_saved':   { en: '★ Watchlist', zh: '★ 自选' },
+    'nav.search_saved_empty': { en: 'Tap ☆ Watchlist beside a stock’s name on its page to keep it here.',
+                            zh: '在个股页面点名称旁的「☆ 加自选」，它就会出现在这里。' },
+    'nav.search_recent':  { en: 'Recently viewed', zh: '最近浏览' },
+    'nav.search_clear':   { en: 'Clear', zh: '清除' },
+    'nav.search_all':     { en: 'All {n} →', zh: '全部 {n} 个 →' },
     'nav.search_empty':   { en: 'Type a symbol, then press Enter.', zh: '输入代码后按回车。' },
     'nav.search_full':    { en: 'Full lookup page →', zh: '完整查询页 →' },
     'nav.sign_in':        { en: 'Sign In',  zh: '登录' },
@@ -373,6 +379,9 @@ const I18n = (() => {
 
     // ── history.html ───────────────────────────────────────────────────
     'history.back':         { en: '← Back', zh: '← 返回' },
+    // The header's watchlist button (static/watchlist.js), labelled rather than a bare star.
+    'history.watch_add':    { en: '☆ Watchlist', zh: '☆ 加自选' },
+    'history.watch_on':     { en: '★ Watching',  zh: '★ 已自选' },
     'history.dca':          { en: 'DCA Valuation', zh: 'DCA 估值' },
     'history.subtitle':     { en: 'Historical PE ratio & price', zh: '历史市盈率及价格' },
 
@@ -650,6 +659,11 @@ const I18n = (() => {
     'companies.watch_local':   { en: 'your watchlist is kept in this browser', zh: '自选列表保存在本浏览器中' },
     'companies.divider_watch': { en: 'Not followed here · no live quote, each opens its own filings',
                                  zh: '本站未跟踪 · 无实时行情，点开即可查看其财报' },
+    'companies.recent':        { en: 'Recently viewed', zh: '最近浏览' },
+    'companies.recent_empty':  { en: 'Nothing viewed yet. Each stock page you open is listed here, newest first.',
+                                 zh: '还没有浏览记录。打开过的个股页面会按时间列在这里，最新的在前。' },
+    'companies.recent_local':  { en: 'newest first, kept in this browser', zh: '最新的在前，保存在本浏览器中' },
+    'companies.recent_clear':  { en: 'Clear history', zh: '清除浏览记录' },
     'companies.sort':          { en: 'Sort', zh: '排序' },
     'companies.sort_mcap':     { en: 'Largest first',       zh: '市值从大到小' },
     'companies.sort_chg':      { en: 'Best today first',    zh: '今日涨幅从高到低' },

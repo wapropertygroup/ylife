@@ -12,11 +12,15 @@
 //
 // Run: node tests/check_dca_row_cells.mjs
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tpl = readFileSync(join(here, '..', 'ystocker', 'templates', 'dca_index.html'), 'utf8');
+// The recent chips read the shared recently viewed list; the real store, so a
+// shape it cannot read fails here rather than drawing an empty row.
+const W = createRequire(import.meta.url)(join(here, '..', 'ystocker', 'static', 'watchlist.js'));
 
 function extract(name) {
   const start = tpl.indexOf(`function ${name}(`);
@@ -155,24 +159,21 @@ console.log('\nfund filter');
   for (const id of ['searchList', 'recentWrap', 'recentList']) dom[id] = el();
 
   let navigated = null;
+  // Recently viewed as the old pages left it: bare strings from this page, a
+  // record from /lookup or the header search, and a fund opened on /history.
+  const stored = { ystocker_recent_tickers: JSON.stringify(['SPY', 'MSFT', { ticker: 'NVDA', name: 'NVIDIA' }]) };
+  const recent = W.create({ getItem: k => stored[k] ?? null, setItem: (k, v) => { stored[k] = v; } },
+                          null, { key: W.RECENT_KEY, max: W.RECENT_MAX });
   const globals = {
     document: { getElementById: id => dom[id], querySelectorAll: () => [] },
     I18n: { t: k => STRINGS[k] ?? null },
     esc: s => String(s ?? ''),
     CT: { c: v => v },
     UNSCORABLE: new Set(['SPY', 'XTL', 'IGV']),
-    // A module-level const in the template, so `extract` (which only takes
-    // functions) does not bring it along. Without it `getRecent` throws on an
-    // undefined name, its own try/catch swallows that, and every recent-chip
-    // assertion passes against an empty list — which is how the paired
-    // "companies stay" check earns its keep.
-    RECENT_KEY: 'ystocker_recent_tickers',
-    window: { location: { set href(v) { navigated = v; } } },
-    localStorage: { _v: '["SPY","MSFT"]', getItem: () => globals.localStorage._v,
-                    setItem: (_k, v) => { globals.localStorage._v = v; } },
+    window: { location: { set href(v) { navigated = v; } }, RecentTickers: recent },
     _rows: [{ ticker: 'MSFT' }],
   };
-  const names = ['cleanSymbol', 'langSuffix', 'dcaUrl', 'getRecent', 'addRecent',
+  const names = ['cleanSymbol', 'langSuffix', 'dcaUrl', 'getRecent',
                  'renderRecent', 'unscorableNote', 'goTo', 'renderSuggestions'];
   const fnSrc = names.map(extract).join('\n');
   const fns = new Function(...Object.keys(globals),
@@ -206,20 +207,27 @@ console.log('\nfund filter');
   check('the Score button refuses a fund', navigated === null);
   check('refusing still explains itself',
         dom.searchList.innerHTML.includes(STRINGS['dcx.not_scorable']));
-  check('a refused fund is not remembered as recent',
-        !JSON.parse(globals.localStorage._v).includes('QQQ'));
-
   navigated = null;
   fns.goTo('MSFT');
   check('a company still navigates, to its DCA tab', navigated === '/history/MSFT?tab=dca');
+  // The stock page records itself once it loads; this page only reads.
+  check('neither pick writes the history itself',
+        JSON.stringify(recent.tickers()) === '["SPY","MSFT","NVDA"]', JSON.stringify(recent.tickers()));
 
-  // RECENT_KEY is shared with navsearch and /lookup, so a fund opened on
+  // Recently viewed is every stock page the reader opened, so a fund opened on
   // /history arrives here as a chip linking to a page that cannot score it.
   fns.renderRecent();
   check('a fund is dropped from the recent chips',
         !dom.recentList.innerHTML.includes('SPY'));
-  check('companies stay in the recent chips',
-        dom.recentList.innerHTML.includes('MSFT'));
+  check('companies stay in the recent chips, bare strings and records alike',
+        dom.recentList.innerHTML.includes('MSFT') && dom.recentList.innerHTML.includes('NVDA'));
+  check('each links to its DCA tab', dom.recentList.innerHTML.includes('href="/history/NVDA?tab=dca"'));
+  for (let i = 0; i < 12; i++) recent.add('C' + i);
+  fns.renderRecent();
+  check('eight chips at most', (dom.recentList.innerHTML.match(/<a /g) || []).length === 8);
+  recent.clear();
+  fns.renderRecent();
+  check('an empty history hides the row', dom.recentWrap._c.has('hidden'));
 }
 
 /* ── Names below V 60 start folded ─────────────────────────────────────────

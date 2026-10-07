@@ -7,10 +7,16 @@
  * they never made. And the old 12-name cap dropped their oldest picks without
  * a word. So most of what follows asserts that nothing is lost.
  *
+ * The same store, under /lookup's other key, is the reader's recently viewed
+ * stocks (window.RecentTickers), which three pages used to keep by hand in two
+ * shapes; the old shapes must still read.
+ *
  * Run: node tests/check_watchlist.mjs
  */
+import { readFileSync, readdirSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
+import vm from 'vm';
 
 const root = path.resolve(import.meta.dirname, '..');
 const require = createRequire(import.meta.url);
@@ -120,6 +126,108 @@ console.log('names');
   eq('and bounded', wl.list()[0].name.length, 120);
   wl.add('NONAME', 42);
   eq('a non-string name falls back to the ticker', wl.list()[0].name, 'NONAME');
+}
+
+console.log('recently viewed: the same store under /lookup\'s other key');
+eq('the key /lookup, the header search and /dca all wrote', W.RECENT_KEY, 'ystocker_recent_tickers');
+{
+  // What the old code left behind: /lookup and the header search wrote
+  // {ticker, name}, and /dca wrote bare strings (dropping the records).
+  const s = memoryStorage({ ystocker_recent_tickers: JSON.stringify(
+    ['MSFT', { ticker: 'NVDA', name: 'NVIDIA' }, 'nvda', { ticker: 'AAPL', name: 'Apple' }]) });
+  const r = W.create(s, null, { key: W.RECENT_KEY, max: W.RECENT_MAX });
+  eq('both old shapes read, in order, one per ticker', r.list(),
+    [{ ticker: 'MSFT', name: 'MSFT' }, { ticker: 'NVDA', name: 'NVIDIA' }, { ticker: 'AAPL', name: 'Apple' }]);
+  r.add('TSM', 'Taiwan Semiconductor');
+  eq('and are written back as records, newest first',
+    JSON.parse(s.data.ystocker_recent_tickers).map(w => w.ticker), ['TSM', 'MSFT', 'NVDA', 'AAPL']);
+  r.add('NVDA');
+  eq('a stock viewed again moves to the front with its name', r.list()[0], { ticker: 'NVDA', name: 'NVIDIA' });
+  r.add('MSFT', 'Microsoft');
+  eq('and a real name replaces the ticker standing in for one', r.list()[0], { ticker: 'MSFT', name: 'Microsoft' });
+  eq('the instance reports its own key and cap', [r.KEY, r.MAX], [W.RECENT_KEY, W.RECENT_MAX]);
+}
+{
+  const s = memoryStorage();
+  const wl = W.create(s);
+  const r = W.create(s, null, { key: W.RECENT_KEY, max: W.RECENT_MAX });
+  wl.add('NVDA');
+  r.add('AAPL');
+  eq('the two lists share storage, not a key', [wl.tickers(), r.tickers()], [['NVDA'], ['AAPL']]);
+  r.clear();
+  t('so clearing the history leaves the watchlist', wl.has('NVDA') && r.list().length === 0);
+}
+{
+  const r = W.create(memoryStorage(), null, { key: W.RECENT_KEY, max: W.RECENT_MAX });
+  for (let i = 0; i < W.RECENT_MAX + 6; i++) r.add('R' + i);
+  eq('recently viewed keeps RECENT_MAX', r.list().length, W.RECENT_MAX);
+  eq('its oldest end falls off', r.tickers()[W.RECENT_MAX - 1], 'R6');
+  const long = memoryStorage({ ystocker_recent_tickers: JSON.stringify(Array.from({ length: 40 }, (_, i) => 'L' + i)) });
+  eq('and the cap holds over a longer list already in storage',
+    W.create(long, null, { key: W.RECENT_KEY, max: W.RECENT_MAX }).list().length, W.RECENT_MAX);
+}
+
+console.log('in a page');
+{
+  const src = readFileSync(path.join(root, 'ystocker/static/watchlist.js'), 'utf8');
+  const fired = [];
+  const listeners = {};
+  const win = {
+    localStorage: memoryStorage(),
+    CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+    addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
+    document: { dispatchEvent: ev => fired.push([ev.type, ev.detail.list.map(w => w.ticker)]) },
+  };
+  vm.runInNewContext(src, { window: win });
+  t('the page gets both lists', !!win.Watchlist && !!win.RecentTickers);
+  win.RecentTickers.add('NVDA', 'NVIDIA');
+  win.Watchlist.add('AAPL');
+  eq('each change announces its own event', fired, [['recent:change', ['NVDA']], ['watchlist:change', ['AAPL']]]);
+  const storage = key => { fired.length = 0; listeners.storage.forEach(fn => fn({ key })); return fired.slice(); };
+  eq('another tab\'s history is the recent event', storage('ystocker_recent_tickers'), [['recent:change', ['NVDA']]]);
+  eq('another tab\'s star is the watchlist event', storage('ystocker_watchlist'), [['watchlist:change', ['AAPL']]]);
+  eq('storage cleared elsewhere announces both', storage(null).map(f => f[0]), ['watchlist:change', 'recent:change']);
+  eq('an unrelated key announces nothing', storage('ystocker_lang'), []);
+}
+
+console.log('loaded once, from base.html, before any page script reads it');
+{
+  const tpl = path.join(root, 'ystocker/templates');
+  const base = readFileSync(path.join(tpl, 'base.html'), 'utf8');
+  const at = base.indexOf("filename='watchlist.js'");
+  t('base.html loads it', at > 0);
+  t('in <head>, ahead of every page\'s content', at > 0 && at < base.indexOf('</head>')
+    && at < base.indexOf('{% block content %}'));
+  t('and ahead of the header search, which reads both lists', at < base.indexOf("filename='navsearch.js'"));
+  const copies = readdirSync(tpl, { recursive: true })
+    .filter(f => f.endsWith('.html') && f !== 'base.html')
+    .filter(f => readFileSync(path.join(tpl, f), 'utf8').includes("filename='watchlist.js'"));
+  eq('no page loads a second copy, which would answer every change twice', copies, []);
+}
+
+console.log('who writes recently viewed');
+{
+  // A stock page records itself once its data has loaded, so a mistyped symbol,
+  // whose page has nothing to show, is never kept; /lookup records the card it
+  // draws in place. Everything else only reads: recording at the moment a
+  // search navigates is what used to fill the list with typos.
+  const tpl = path.join(root, 'ystocker/templates');
+  const hist = readFileSync(path.join(tpl, 'history.html'), 'utf8');
+  const fetchAt = hist.indexOf('const resp = await fetch(`/api/history/${encodeURIComponent(TICKER)}`);');
+  const refusedAt = hist.indexOf('if (!resp.ok) {', fetchAt);
+  const recordAt = hist.indexOf('window.RecentTickers.add(TICKER, data.name', fetchAt);
+  t('/history records the stock it shows', fetchAt > 0 && recordAt > 0);
+  t('after the request for its data and the return on a refusal',
+    fetchAt < refusedAt && refusedAt < recordAt && hist.slice(refusedAt, recordAt).includes('return;'));
+  t('in the same function, beside the name it records', recordAt - fetchAt < 1500
+    && hist.slice(fetchAt, recordAt).includes("getElementById('stockName').textContent"));
+  const files = readdirSync(tpl, { recursive: true }).filter(f => f.endsWith('.html')).map(f => path.join(tpl, f))
+    .concat(readdirSync(path.join(root, 'ystocker/static')).filter(f => f.endsWith('.js'))
+      .map(f => path.join(root, 'ystocker/static', f)));
+  const writers = files.filter(f => /RecentTickers\.(add|toggle)\(/.test(readFileSync(f, 'utf8')))
+    .map(f => path.relative(root, f)).sort();
+  eq('and only /history and /lookup write it', writers,
+    ['ystocker/templates/history.html', 'ystocker/templates/lookup.html']);
 }
 
 if (failures.length) {

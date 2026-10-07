@@ -562,7 +562,6 @@ document.querySelectorAll('th.sortable').forEach(th => {
       row most of the market would look unsearchable.
    2. I18n is a script-scoped `const`, not a property of window, so guarding on
       `window.I18n` fails open and silently drops ?lang=zh from every link.   */
-const RECENT_KEY = 'ystocker_recent_tickers';   // shared with navsearch + lookup
 const SEARCH_DEBOUNCE_MS = 130;
 let _sugg = [], _active = -1, _suggTimer = null;
 
@@ -572,10 +571,10 @@ let _sugg = [], _active = -1, _suggTimer = null;
    autocomplete cannot afford a round trip to learn something that does not
    change between keystrokes.
 
-   RECENT_KEY is shared with navsearch and /lookup, where an ETF is a perfectly
-   reasonable thing to have looked at — so this page inherits recents it must
-   not offer, which is why the filter is applied in three places and not just
-   to the suggestion list. */
+   The recent chips are every stock page the reader opened, where an ETF is a
+   perfectly reasonable thing to have looked at — so this page inherits recents
+   it must not offer, which is why the filter is applied in three places and
+   not just to the suggestion list. */
 const UNSCORABLE = new Set({{ unscorable | tojson }});
 
 /* Yahoo symbols are not just letters: BRK-B, ^GSPC, GC=F and 7203.T all have to
@@ -596,25 +595,20 @@ function dcaUrl(ticker) {
   return '/history/' + encodeURIComponent(ticker) + '?tab=dca' + langSuffix().replace('?', '&');
 }
 
+/* Recently viewed, newest first: static/watchlist.js's list, which a stock page
+   adds itself to as it loads -- the DCA tab this page links to included, so a
+   pick here records itself. This page used to keep the list by hand, as bare
+   strings, and dropped the {ticker, name} records the other pages wrote into
+   the same key. */
 function getRecent() {
-  try {
-    const a = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-    return Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
-  } catch (_) { return []; }
-}
-
-function addRecent(ticker) {
-  try {
-    const next = [ticker].concat(getRecent().filter(t => t !== ticker)).slice(0, 8);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-  } catch (_) { /* private mode: recents are a convenience, not a feature */ }
+  return window.RecentTickers ? window.RecentTickers.tickers() : [];
 }
 
 function renderRecent() {
   // A fund the reader looked at on /history is not a candidate here, and the
   // chip gives no hint of that — it would just be a link to a minute of
   // rebuilding and an error.
-  const list = getRecent().filter(t => !UNSCORABLE.has(t));
+  const list = getRecent().filter(t => !UNSCORABLE.has(t)).slice(0, 8);
   const wrap = document.getElementById('recentWrap');
   if (!list.length) { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
@@ -644,7 +638,6 @@ function goTo(ticker) {
   const sym = cleanSymbol(ticker);
   if (!sym) return;
   if (UNSCORABLE.has(sym)) { unscorableNote(sym); return; }
-  addRecent(sym);
   window.location.href = dcaUrl(sym);
 }
 
@@ -724,6 +717,7 @@ searchBox.addEventListener('keydown', ev => {
 
 searchBox.addEventListener('blur', () => setTimeout(closeSuggestions, 120));
 document.getElementById('searchGo').addEventListener('click', () => goTo(searchBox.value));
+document.addEventListener('recent:change', renderRecent);   // another tab opened a stock
 renderRecent();
 
 const baseInput = document.getElementById('baseInput');

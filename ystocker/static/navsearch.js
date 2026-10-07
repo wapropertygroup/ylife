@@ -16,13 +16,19 @@
  * there is one and offered bare when there is not. Without that lead row
  * anything off the curated list (most of the market) would look unsearchable,
  * even though /history/<TICKER> and /api/ticker/<TICKER> take any symbol.
+ *
+ * With nothing typed, the box lists the reader's watchlist and the stocks they
+ * recently viewed (static/watchlist.js), SHOWN of each, with a link to the
+ * rest on /companies. A search records nothing itself: the stock page adds
+ * itself to recently viewed once its data loads, so a mistyped symbol, whose
+ * page has nothing to show, is not remembered.
  */
 (function () {
   'use strict';
 
-  var RECENT_KEY = 'ystocker_recent_tickers';  // shared with lookup.html
   var DEBOUNCE_MS = 130;
   var MAX_LEN = 12;
+  var SHOWN = 5;      // rows of each list in the empty box; the rest are a link away
 
   /*
    * i18n.js declares `const I18n = (function(){...})()`. A top-level `const`
@@ -70,21 +76,25 @@
     return '/lookup' + (q || lang);
   }
 
-  function getRecent() {
-    try {
-      var arr = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
-      return Array.isArray(arr) ? arr : [];
-    } catch (_) { return []; }
+  // Where each list is shown whole: /companies' Watchlist and Recently viewed.
+  function companiesUrl(view) {
+    return '/companies?view=' + view + langSuffix().replace('?', '&');
   }
 
-  /* Mirrors lookup.html's _addRecent so the two surfaces share one history
-     list — searching from the banner populates the Recent chips on /lookup. */
-  function addRecent(ticker, name) {
-    try {
-      var arr = getRecent().filter(function (x) { return x && x.ticker !== ticker; });
-      arr.unshift({ ticker: ticker, name: name || ticker });
-      localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, 6)));
-    } catch (_) {}
+  /* One of the reader's lists from static/watchlist.js (window.Watchlist,
+     window.RecentTickers), or null when that script did not load, in which
+     case the empty box just asks for a symbol. */
+  function readList(store) {
+    try { return store && store.list ? store.list() : null; } catch (_) { return null; }
+  }
+
+  /* What a list row shows beside the ticker: the Chinese name on a Chinese
+     page where one is known, else the stored name, and nothing rather than
+     the ticker twice (a list entry with no name stores its ticker as one). */
+  function displayName(w) {
+    var m = i18n(), name = w.name && w.name !== w.ticker ? w.name : '';
+    try { if (m && m.stockName) name = m.stockName(w.ticker, name) || ''; } catch (_) {}
+    return name === w.ticker ? '' : name;
   }
 
   function esc(s) {
@@ -128,10 +138,9 @@
       active = -1;
     }
 
-    function go(ticker, name) {
+    function go(ticker) {
       ticker = clean(ticker);
       if (!ticker) return;
-      addRecent(ticker, name);
       window.location.href = historyUrl(ticker);
     }
 
@@ -142,19 +151,26 @@
       if (fullLink) fullLink.setAttribute('href', lookupUrl(typed));
 
       if (!typed) {
-        var recent = getRecent();
-        if (recent.length) {
-          html += header(t('nav.search_recent', 'Recent'));
-          html += recent.map(function (r, i) {
-            return row(r.ticker, r.name, '', i);
-          }).join('');
-          rows = recent.map(function (r) {
-            return { ticker: r.ticker, name: r.name, group: '' };
-          });
-        } else {
-          rows = [];
-          html += '<p class="px-3 py-3 text-xs text-slate-500">' +
-                  esc(t('nav.search_empty', 'Type a symbol, then press Enter.')) + '</p>';
+        var saved = readList(window.Watchlist);
+        var recent = readList(window.RecentTickers);
+        rows = [];
+        // The watchlist's header shows even while it is empty, with the way
+        // to fill it: a list nobody knows how to add to may as well not exist.
+        if (saved) {
+          html += header(t('nav.search_saved', '★ Watchlist'));
+          html += saved.length
+            ? listRows(saved, 'watch')
+            : note(t('nav.search_saved_empty', 'Tap ☆ Watchlist beside a stock’s name on its page to keep it here.'));
+        }
+        if (recent && recent.length) {
+          html += header(t('nav.search_recent', 'Recently viewed'),
+            '<button type="button" data-navsearch-clear' +
+            ' class="text-[10px] text-slate-500 hover:text-brand transition">' +
+            esc(t('nav.search_clear', 'Clear')) + '</button>');
+          html += listRows(recent, 'recent');
+        }
+        if (!saved && !(recent && recent.length)) {
+          html += note(t('nav.search_empty', 'Type a symbol, then press Enter.'));
         }
         results.innerHTML = html;
         return;
@@ -190,9 +206,30 @@
       paint();
     }
 
-    function header(label) {
-      return '<p class="px-3 pt-2 pb-1 text-[10px] font-semibold tracking-widest uppercase text-slate-500">' +
-             esc(label) + '</p>';
+    function header(label, action) {
+      return '<div class="flex items-center justify-between gap-2 px-3 pt-2 pb-1">' +
+             '<span class="text-[10px] font-semibold tracking-widest uppercase text-slate-500">' +
+             esc(label) + '</span>' + (action || '') + '</div>';
+    }
+
+    function note(text) {
+      return '<p class="px-3 pt-1.5 pb-2 text-xs text-slate-500">' + esc(text) + '</p>';
+    }
+
+    /* A list's first SHOWN entries, as rows Enter and the arrows act on (their
+       indexes run on from the list above), then a link to the whole list. */
+    function listRows(list, view) {
+      var html = '';
+      list.slice(0, SHOWN).forEach(function (w) {
+        html += row(w.ticker, displayName(w), '', rows.length);
+        rows.push({ ticker: w.ticker, name: w.name, group: '' });
+      });
+      if (list.length > SHOWN) {
+        html += '<a href="' + esc(companiesUrl(view)) + '"' +
+                ' class="block px-3 py-1.5 text-[11px] text-slate-500 hover:text-brand transition">' +
+                esc(t('nav.search_all', 'All {n} →').replace('{n}', list.length)) + '</a>';
+      }
+      return html;
     }
 
     function row(ticker, name, group, i, hint) {
@@ -254,21 +291,29 @@
         e.preventDefault();
         // With nothing highlighted, Enter takes the lead row — which on a
         // non-empty box is always the typed symbol, so Enter is never a no-op
-        // there. On an *empty* box rows[0] is the newest Recent entry, which
+        // there. On an *empty* box rows[0] is the first watchlist entry, which
         // the visitor did not ask for, so Enter does nothing instead.
         var pick = active >= 0 ? rows[active] : (clean(input.value) ? rows[0] : null);
         if (!pick) return;
-        go(pick.ticker, pick._hint ? '' : pick.name);
+        go(pick.ticker);
       } else if (e.key === 'Escape') {
         if (panel) { close(); input.blur(); }
       }
     });
 
     results.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-navsearch-clear]')) {
+        // The redraw below detaches the button, and the document's listener
+        // would then read the click as one outside the panel and close it.
+        e.stopPropagation();
+        if (window.RecentTickers) window.RecentTickers.clear();   // recent:change redraws
+        active = -1;
+        if (panel) input.focus();   // not in the phone menu: it would raise the keyboard
+        return;
+      }
       var btn = e.target.closest ? e.target.closest('.navsearch-row') : null;
       if (!btn) return;
-      var pick = rows[parseInt(btn.getAttribute('data-i'), 10)];
-      go(btn.getAttribute('data-ticker'), pick && !pick._hint ? pick.name : '');
+      go(btn.getAttribute('data-ticker'));
     });
 
     if (toggle) {
@@ -287,6 +332,14 @@
 
     document.addEventListener('i18n:langchange', function () {
       if (isOpen()) render();
+    });
+
+    // A star pressed on the page, a stock page recorded, or either list
+    // changed in another tab: an empty box shows the lists as they are now.
+    ['watchlist:change', 'recent:change'].forEach(function (type) {
+      document.addEventListener(type, function () {
+        if (isOpen() && !clean(input.value)) { active = -1; render(); }
+      });
     });
   }
 

@@ -5,7 +5,6 @@
 <script src="{{ url_for('static', filename='markdown.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script src="{{ url_for('static', filename='ystime.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script src="{{ url_for('static', filename='fundamentals.js') }}?v={{ cache_bust or 'dev' }}"></script>
-<script src="{{ url_for('static', filename='watchlist.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <style>
   /* ── Theme tokens ────────────────────────────────────────────────────────
      Hand-written CSS, so Tailwind's `dark:` variant reaches none of it. The
@@ -2143,6 +2142,9 @@ function _yieldCurve() {
 
   // Stat cards
   document.getElementById('stockName').textContent     = data.name || '';
+  // Recently viewed (static/watchlist.js), for the header search and
+  // /companies. Only once the page has data, so a mistyped symbol is not kept.
+  if (window.RecentTickers) window.RecentTickers.add(TICKER, data.name || '');
   // Data freshness badge
   if (data.cached_at) {
     const ageMin = Math.round((Date.now()/1000 - data.cached_at) / 60);
@@ -4558,14 +4560,17 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 
 // ── Watchlist star ───────────────────────────────────────────────────────────
 // static/watchlist.js: the same list as the stars on /companies and /lookup, so
-// a company starred here is in /companies' Watchlist view with its quote.
+// a company starred here is in /companies' Watchlist view with its quote, and
+// at the top of the header search. Labelled, not a bare star: a lone ☆ beside
+// the 🔗 did not read as the way to save a stock.
 (function () {
   const btn = document.getElementById('watchBtn');
   const WL = window.Watchlist;
   if (!btn || !WL) return;
   const paint = () => {
     const on = WL.has(TICKER);
-    btn.textContent = on ? '★' : '☆';
+    btn.textContent = on ? (I18n.t('history.watch_on') || '★ Watching')
+                         : (I18n.t('history.watch_add') || '☆ Watchlist');
     btn.classList.toggle('is-on', on);
     btn.setAttribute('aria-pressed', String(on));
     btn.title = on ? (I18n.t('companies.star_remove') || 'Remove from watchlist')
