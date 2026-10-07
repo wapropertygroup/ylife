@@ -419,13 +419,14 @@ class Page(unittest.TestCase):
     def test_suggestions_come_from_the_followed_companies_and_secs_list(self):
         from unittest import mock
 
-        from ystocker import directory, routes
+        from ystocker import directory, routes, symbols
         sec = {"rows": [
             {"t": "AMAT", "n": "Applied Materials Inc", "x": "Nasdaq", "also": [], "cik": 1},
             {"t": "MDLZ", "n": "Mondelez International, Inc.", "x": "Nasdaq", "also": [], "cik": 2},
         ]}
         followed = next(t for ts in routes.PEER_GROUPS.values() for t in ts if t.isalpha())
-        with mock.patch.object(directory, "peek", return_value=sec):
+        with mock.patch.object(directory, "peek", return_value=sec), \
+                mock.patch.object(symbols, "quotes", return_value=None):
             by_ticker = self.client.get("/api/companies/suggest?q=amat")
             by_name = self.client.get("/api/companies/suggest?q=mondelez").get_json()
             ours = self.client.get(f"/api/companies/suggest?q={followed}").get_json()
@@ -435,17 +436,77 @@ class Page(unittest.TestCase):
         first = by_ticker.get_json()["results"][0]
         self.assertEqual((first["ticker"], first["exchange"]), ("AMAT", "Nasdaq"))
         self.assertEqual([r["ticker"] for r in by_name["results"]], ["MDLZ"])
+        self.assertEqual(by_name["sources"], ["local"])
         self.assertIn(followed, [r["ticker"] for r in ours["results"]])
-        self.assertEqual(empty, {"results": []})
+        self.assertEqual(empty, {"results": [], "sources": []})
 
     def test_suggestions_survive_a_cold_directory(self):
         from unittest import mock
 
-        from ystocker import directory
-        with mock.patch.object(directory, "peek", return_value=None):
+        from ystocker import directory, symbols
+        with mock.patch.object(directory, "peek", return_value=None), \
+                mock.patch.object(symbols, "quotes", return_value=None):
             resp = self.client.get("/api/companies/suggest?q=zzzz")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.get_json(), {"results": []})
+        self.assertEqual(resp.get_json(), {"results": [], "sources": ["local"]})
+
+    # "TSMC ticker should have auto complete" (2026-10-06). TSMC is nobody's
+    # ticker. SEC's list knows it by initials; Yahoo's answer, as served to the
+    # box, holds receipts in São Paulo and Buenos Aires and Tesmec, but no TSM.
+    _TSM_SEC = {"rows": [
+        {"t": "TSM", "n": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD", "x": "NYSE", "also": [], "cik": 1046179},
+        {"t": "TSLA", "n": "Tesla, Inc.", "x": "Nasdaq", "also": [], "cik": 1318605},
+    ]}
+
+    def _yahoo(self, name):
+        import json
+        got = json.loads((ROOT / "tests" / "fixtures" / "symbols" / "yahoo.json").read_text())[name]
+        return got["status"], got["body"]
+
+    def test_an_abbreviation_finds_its_company_before_yahoo(self):
+        from unittest import mock
+
+        from ystocker import directory, quota, symbols
+        spent = []
+        with mock.patch.object(directory, "peek", return_value=self._TSM_SEC), \
+                mock.patch.object(symbols, "_searches", {}), \
+                mock.patch.object(symbols, "_get", return_value=self._yahoo("search_TSMC")) as get, \
+                mock.patch.object(quota, "try_consume_suggest_search",
+                                  side_effect=lambda: spent.append(1) or True):
+            got = self.client.get("/api/companies/suggest?q=TSMC").get_json()
+            again = self.client.get("/api/companies/suggest?q=tsmc").get_json()
+        tickers = [r["ticker"] for r in got["results"]]
+        self.assertEqual(tickers[0], "TSM")
+        # Then Yahoo's companies: no tokens, no fund.
+        self.assertEqual(tickers[1:], ["TSMC34.SA", "TSMC.BA", "TSMCF"])
+        self.assertEqual(got["sources"], ["local", "yahoo"])
+        # Asked again within six hours: from memory, spending nothing.
+        self.assertEqual(again, got)
+        self.assertEqual((get.call_count, len(spent)), (1, 1))
+
+    def test_yahoo_is_asked_only_while_the_list_is_short(self):
+        from unittest import mock
+
+        from ystocker import directory, symbols
+        sec = {"rows": [{"t": f"AB{c}", "n": f"Company {c}", "x": "NYSE", "also": [], "cik": i}
+                        for i, c in enumerate("CDEFGHIJKL")]}
+        with mock.patch.object(directory, "peek", return_value=sec), \
+                mock.patch.object(symbols, "quotes") as quotes:
+            got = self.client.get("/api/companies/suggest?q=ab").get_json()
+        quotes.assert_not_called()
+        self.assertEqual((len(got["results"]), got["sources"]), (8, ["local"]))
+
+    def test_past_the_daily_allowance_the_local_lists_answer_alone(self):
+        from unittest import mock
+
+        from ystocker import directory, quota, symbols
+        with mock.patch.object(directory, "peek", return_value=self._TSM_SEC), \
+                mock.patch.object(symbols, "_searches", {}), \
+                mock.patch.object(symbols, "_get") as get, \
+                mock.patch.object(quota, "try_consume_suggest_search", return_value=False):
+            got = self.client.get("/api/companies/suggest?q=TSMC").get_json()
+        get.assert_not_called()
+        self.assertEqual(([r["ticker"] for r in got["results"]], got["sources"]), (["TSM"], ["local"]))
 
     def test_page_carries_the_compare_row(self):
         html = self.client.get("/history/NVDA").get_data(as_text=True)
@@ -455,6 +516,8 @@ class Page(unittest.TestCase):
         self.assertIn(".get('compare')", html)                 # ?compare= is read
         self.assertIn("searchParams.set('compare'", html)      # and written back
         self.assertIn("F.calendarKey", html)                   # periods line up by calendar
+        self.assertIn("data-fund-swap", html)                  # a dead symbol offers what it meant
+        self.assertIn("offerAlternatives(entry)", html)
 
     def test_every_compare_string_is_in_both_languages(self):
         source = HISTORY.read_text()

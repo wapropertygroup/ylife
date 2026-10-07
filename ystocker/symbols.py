@@ -37,6 +37,17 @@ traffic.
 
 Answers are cached per process: a search for 6 hours, "found" for a day, and
 "missing" for 30 minutes, since a listing can begin trading.
+
+The Fundamentals tab's compare box (``/api/companies/suggest``) reads the same
+two sources the other way round, local first (2026-10-06, "TSMC ticker should
+have auto complete"). Yahoo's search does not know TSMC is TSM: from the box it
+answered with a São Paulo receipt (TSMC34.SA), a Buenos Aires one, Tesmec
+(TSMCF, another company), three crypto tokens and a Korean ETF. SEC's list does
+know, by initials: Taiwan Semiconductor Manufacturing Co Ltd. So
+:func:`local_matches` reads a name's initials as well as its words, and Yahoo
+(:func:`quotes`) only fills what the local lists leave, which is where a renamed
+brand ("google" is Alphabet) or a listing SEC has never seen (005930.KS) turns
+up.
 """
 from __future__ import annotations
 
@@ -64,6 +75,12 @@ _CACHE_MAX = 2000
 #: future or currency cannot even be typed into the form.
 SUGGEST_TYPES = frozenset({"EQUITY", "ETF"})
 
+#: What has fundamentals: a company. A fund is ``not_a_company`` on the tab.
+COMPANY_TYPES = frozenset({"EQUITY"})
+
+#: The fields :func:`parse_search` reads, all a cached answer keeps.
+_QUOTE_FIELDS = ("symbol", "quoteType", "longname", "shortname", "exchDisp", "exchange")
+
 FOUND, MISSING, UNKNOWN = "found", "missing", "unknown"
 
 #: Letters, digits and the punctuation of company names, in ASCII: Yahoo's
@@ -79,12 +96,14 @@ _session = None
 
 # ── Pure ────────────────────────────────────────────────────────────────────
 
-def parse_search(payload: Any, accept: Callable[[str], bool]) -> list[dict[str, Any]]:
+def parse_search(payload: Any, accept: Callable[[str], bool],
+                 types: frozenset[str] = SUGGEST_TYPES) -> list[dict[str, Any]]:
     """Yahoo's search answer as suggestions the run form will take.
 
     Each is ``{"ticker", "name", "exchange", "type"}``, in Yahoo's order (its
     relevance), at most :data:`MAX_RESULTS`, one per symbol. ``accept`` is the
-    form's own validator, so nothing is offered that the form would refuse.
+    form's own validator, so nothing is offered that the form would refuse, and
+    ``types`` the quote types it can use.
     """
     quotes = payload.get("quotes") if isinstance(payload, dict) else None
     out: list[dict[str, Any]] = []
@@ -94,7 +113,7 @@ def parse_search(payload: Any, accept: Callable[[str], bool]) -> list[dict[str, 
             continue
         symbol = str(q.get("symbol") or "").strip().upper()
         kind = str(q.get("quoteType") or "").upper()
-        if not symbol or symbol in seen or kind not in SUGGEST_TYPES or not accept(symbol):
+        if not symbol or symbol in seen or kind not in types or not accept(symbol):
             continue
         seen.add(symbol)
         out.append({
@@ -127,22 +146,56 @@ def parse_chart(status: int, payload: Any) -> str:
     return FOUND if first.get("timestamp") else MISSING
 
 
+def _fold(text: str) -> str:
+    """Upper case with punctuation as spaces, so "Coca-Cola" meets SEC's
+    "COCA COLA CO" and "AT&T" meets "AT T INC"."""
+    return " ".join(re.sub(r"[^0-9A-Z]+", " ", text.upper()).split())
+
+
+def _initials(folded: str) -> str:
+    """Each word's first character, from a :func:`_fold`-ed name: TSMCL for
+    "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"."""
+    return "".join(word[0] for word in folded.split())
+
+
 def local_matches(query: str, rows: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
-    """Suggestions from a local list of ``(ticker, name, exchange)``: tickers
-    starting with the query first, then names containing it."""
+    """Suggestions from a local list of ``(ticker, name, exchange)``, in three
+    tiers: tickers starting with the query; then, for one word of three letters
+    or more, names whose initials start with it ("TSMC" is Taiwan Semiconductor
+    Manufacturing Co, ticker TSM, whose name and ticker hold no "TSMC"); then
+    names containing it, punctuation aside. Within a tier, the rows' order."""
     q = query.strip().upper()
     if not q:
         return []
+    folded = _fold(q)
+    abbreviation = folded if len(folded) >= 3 and folded.isalpha() else ""
+    names = [_fold(r[1]) for r in rows] if folded else []
     prefix = [r for r in rows if r[0].startswith(q)]
-    named = [r for r in rows if not r[0].startswith(q) and q in r[1].upper()]
+    initials = [r for r, n in zip(rows, names) if abbreviation and _initials(n).startswith(abbreviation)]
+    named = [r for r, n in zip(rows, names) if folded in n]
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for ticker, name, exchange in prefix + named:
+    for ticker, name, exchange in prefix + initials + named:
         if ticker in seen:
             continue
         seen.add(ticker)
         out.append({"ticker": ticker, "name": name, "exchange": exchange, "type": ""})
         if len(out) >= MAX_RESULTS:
+            break
+    return out
+
+
+def merge(first: list[dict[str, Any]], then: list[dict[str, Any]],
+          limit: int = MAX_RESULTS) -> list[dict[str, Any]]:
+    """*first*, then what *then* adds to it, one per ticker, at most *limit*."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in first + then:
+        if item["ticker"] in seen:
+            continue
+        seen.add(item["ticker"])
+        out.append(item)
+        if len(out) >= limit:
             break
     return out
 
@@ -224,6 +277,38 @@ def _local_rows(followed: Optional[Callable[[], list[tuple[str, str, str]]]]
     return [r for r in rows if _accept(r[0])]
 
 
+def quotes(query: Any, budget: Optional[Callable[[], bool]] = None
+           ) -> Optional[list[dict[str, Any]]]:
+    """Yahoo's search answer for *query*, every quote unfiltered (callers filter
+    with :func:`parse_search`), cached per query. ``None`` when Yahoo could not
+    be asked: a query not worth sending, a transport failure or a non-200, or
+    *budget* declining to spend a call. A cached answer spends nothing."""
+    q = " ".join(str(query or "").split())
+    if not q or not _QUERY_RE.match(q):
+        return None
+    key = q.lower()
+    cached = _recall(_searches, key, SEARCH_TTL_SECONDS)
+    if cached is not None:
+        return cached
+    if budget is not None and not budget():
+        log.info("symbols: today's searches are spent; %r is answered locally", q)
+        return None
+    try:
+        status, body = _get(SEARCH_URL, {"q": q, "quotesCount": 10,
+                                         "newsCount": 0, "listsCount": 0})
+    except Exception as exc:  # noqa: BLE001 - the caller falls back to what is on disk
+        log.info("symbols: search for %r failed (%s)", q, exc)
+        return None
+    if status != 200 or not isinstance(body, dict):
+        log.info("symbols: search for %r answered HTTP %s", q, status)
+        return None
+    raw = body.get("quotes")
+    found = [{k: x[k] for k in _QUOTE_FIELDS if k in x}
+             for x in (raw if isinstance(raw, list) else []) if isinstance(x, dict)]
+    _remember(_searches, key, found)
+    return found
+
+
 def search(query: Any, followed: Optional[Callable[[], list[tuple[str, str, str]]]] = None
            ) -> tuple[list[dict[str, Any]], str]:
     """Suggestions for what has been typed, and where they came from
@@ -232,20 +317,9 @@ def search(query: Any, followed: Optional[Callable[[], list[tuple[str, str, str]
     q = " ".join(str(query or "").split())
     if not q or not _QUERY_RE.match(q):
         return [], "none"
-    key = q.lower()
-    cached = _recall(_searches, key, SEARCH_TTL_SECONDS)
-    if cached is not None:
-        return cached, "yahoo"
-    try:
-        status, body = _get(SEARCH_URL, {"q": q, "quotesCount": 10,
-                                         "newsCount": 0, "listsCount": 0})
-        if status == 200 and isinstance(body, dict):
-            found = parse_search(body, _accept)
-            _remember(_searches, key, found)
-            return found, "yahoo"
-        log.info("symbols: search for %r answered HTTP %s", q, status)
-    except Exception as exc:  # noqa: BLE001 - fall back to what is on disk
-        log.info("symbols: search for %r failed (%s)", q, exc)
+    found = quotes(q)
+    if found is not None:
+        return parse_search({"quotes": found}, _accept), "yahoo"
     return local_matches(q, _local_rows(followed)), "local"
 
 

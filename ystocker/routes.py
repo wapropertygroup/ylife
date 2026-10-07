@@ -4407,17 +4407,23 @@ def companies():
 def api_companies_suggest():
     """Companies to add to a comparison on the Fundamentals tab.
 
-    Searched in what this box already holds: the followed companies and SEC's
-    list (``symbols.local_matches``: tickers starting with the query, then
-    names containing it). No request leaves the box, which is why it can be
-    public, as the tab is. A listing in neither, such as 7203.T, is still added
-    by typing its symbol and pressing Enter.
+    First what this box already holds: the followed companies and SEC's list
+    (``symbols.local_matches``: tickers starting with the query, then names
+    whose initials start with it, so "TSMC" finds TSM, then names containing
+    it). Then, while that leaves the list short, the companies in Yahoo's
+    search (``symbols.quotes``), for a renamed brand ("google" is Alphabet) or a
+    listing SEC does not have (005930.KS). Yahoo is not first because for
+    "TSMC" it offers São Paulo and Buenos Aires receipts and Tesmec, never TSM.
+    The tab is public, so each query sent to Yahoo spends one of a daily
+    allowance (``quota.try_consume_suggest_search``); one asked within six
+    hours spends nothing, and once the allowance is gone the local lists
+    answer alone.
     """
-    from ystocker import directory, fundamentals, symbols
+    from ystocker import directory, fundamentals, quota, symbols
 
     query = " ".join(str(request.args.get("q", "") or "").split())[:40]
     if not query:
-        return jsonify({"results": []})
+        return jsonify({"results": [], "sources": []})
     # One row per ticker: SEC's order (roughly largest first) and exchange, the
     # ticker cache's name where it has one, which reads better than SEC's legal
     # name; then the followed listings SEC does not know (7203.T).
@@ -4430,7 +4436,15 @@ def api_companies_suggest():
         if name:
             row[1] = name
     found = [tuple(r) for r in rows.values() if fundamentals.normalise(r[0])]
-    resp = jsonify({"results": symbols.local_matches(query, found)})
+    results, sources = symbols.local_matches(query, found), ["local"]
+    if len(results) < symbols.MAX_RESULTS:
+        answer = symbols.quotes(query, budget=quota.try_consume_suggest_search)
+        if answer is not None:
+            companies = symbols.parse_search({"quotes": answer}, lambda t: bool(fundamentals.normalise(t)),
+                                             types=symbols.COMPANY_TYPES)
+            results = symbols.merge(results, companies)
+            sources.append("yahoo")
+    resp = jsonify({"results": results, "sources": sources})
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 

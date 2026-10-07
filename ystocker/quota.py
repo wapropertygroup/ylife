@@ -609,6 +609,34 @@ def try_consume_insider_lookup() -> bool:
     return True
 
 
+def limit_suggest_searches() -> int:
+    """Yahoo searches the Fundamentals tab's compare box starts per day, every
+    reader together (``/api/companies/suggest``).
+
+    The tab is public, and each query the local lists cannot fill is one call
+    to Yahoo's search; a query asked again within six hours is answered from
+    memory and spends nothing. Past the cap the local lists answer alone, so a
+    script typing at the box costs the box no more than this.
+    ``SUGGEST_DAILY_SEARCHES`` tunes it.
+    """
+    return _int_env("SUGGEST_DAILY_SEARCHES", 1000)
+
+
+def try_consume_suggest_search() -> bool:
+    """Spend one of today's compare-box searches, or return ``False``. Same
+    file and lock as the other counters, under its own key."""
+    day, lim = today(), limit_suggest_searches()
+    with _Guard():
+        data = _read(day)
+        used = int(data.get("suggest_searches", 0))
+        if used >= lim:
+            return False
+        data["suggest_searches"] = used + 1
+        data["day"] = day
+        _write(day, data)
+    return True
+
+
 def limit_signup_notices() -> int:
     """Mails to the owner about first sign-ins per day (``ystocker.signups``).
 

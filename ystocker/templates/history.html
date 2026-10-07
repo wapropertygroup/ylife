@@ -392,6 +392,9 @@
   .fd-cmp-x { border: 0; background: none; padding: 0 0 0 2px; cursor: pointer; line-height: 1;
               font-size: 12px; color: var(--t-ink-dim); }
   .fd-cmp-x:hover { color: var(--fd-down); }
+  .fd-cmp-alt { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 11px;
+                color: var(--t-accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+  .fd-cmp-alt:hover { color: var(--t-ink-strong); }
   .fd-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; flex: none; }
   .fd-cmp-add { position: relative; }
   .fd-cmp-add input { width: 160px; padding: 4px 10px; font-size: 12px; border-radius: 999px;
@@ -7346,9 +7349,13 @@ async function explainChart(chartKey) {
     $('fundCmpChips').innerHTML = compare.map(c => {
       const state = c.state === 'ready' ? ''
         : `<span class="fd-cmp-state${c.state === 'loading' || c.state === 'building' || c.state === 'queued' ? '' : ' bad'}">${esc(states[c.state] || '')}</span>`;
+      const alts = c.state !== 'ready' && c.alts && c.alts.length
+        ? `<span class="fd-cmp-state">${esc(tr('fund.cmp_did_you_mean', 'did you mean'))}</span>`
+          + c.alts.map(t => `<button type="button" class="fd-cmp-alt" data-fund-swap="${esc(c.ticker)}" data-fund-to="${esc(t)}">${esc(t)}</button>`).join('')
+        : '';
       const remove = tr('fund.cmp_remove', 'Remove {t}').replace('{t}', c.ticker);
       return `<span class="fd-cmp-chip fd-mono"><i class="fd-dot" style="background:${c.color}"></i>`
-        + `<a href="/history/${encodeURIComponent(c.ticker)}?tab=fundamentals">${esc(c.ticker)}</a>${state}`
+        + `<a href="/history/${encodeURIComponent(c.ticker)}?tab=fundamentals">${esc(c.ticker)}</a>${state}${alts}`
         + `<button type="button" class="fd-cmp-x" data-fund-remove="${esc(c.ticker)}" title="${esc(remove)}" aria-label="${esc(remove)}">✕</button></span>`;
     }).join('');
     const offered = (peers || []).filter(t => t !== TICKER && !compare.some(c => c.ticker === t));
@@ -7376,9 +7383,25 @@ async function explainChart(chartKey) {
       if (!compare.includes(entry)) return;              // removed while loading
       if (got.payload && !got.payload.unavailable) { entry.payload = got.payload; entry.state = 'ready'; }
       else entry.state = got.payload ? 'unavailable' : got.state;
+      if (entry.state === 'unavailable' || entry.state === 'invalid') offerAlternatives(entry);
       render();
     });
     return true;
+  }
+
+  // A symbol with nothing behind it, such as "TSMC" from an old link (it is
+  // TSM), gets the suggestions for what was typed as one-click replacements.
+  async function offerAlternatives(entry) {
+    const items = await cmpSuggest(entry.ticker);
+    if (!compare.includes(entry)) return;
+    const taken = new Set([TICKER].concat(compare.map(c => c.ticker)));
+    entry.alts = items.map(it => it.ticker).filter(t => !taken.has(t)).slice(0, 2);
+    if (entry.alts.length && payload) drawCompareBar();
+  }
+
+  function swapCompare(from, to) {
+    removeCompare(from);
+    addCompare(to);
   }
 
   function removeCompare(sym) {
@@ -7389,9 +7412,11 @@ async function explainChart(chartKey) {
     render();
   }
 
-  // The add box's suggestions: /api/companies/suggest, from the followed
-  // companies and SEC's list. Enter adds the highlighted one, or what was
-  // typed, so a listing in neither (7203.T) can still be added by symbol.
+  // The add box's suggestions: /api/companies/suggest, the followed companies
+  // and SEC's list first (by ticker, initials, then name), then Yahoo's search.
+  // Enter adds the highlighted one; with none highlighted, a listing whose
+  // ticker is what was typed, else the first, since a name ("apple") or an
+  // abbreviation ("TSMC") is not itself a ticker.
   const cmpInput = $('fundCmpInput'), cmpList = $('fundCmpList');
   let cmpItems = [], cmpActive = -1, cmpTimer = null, cmpSeq = 0;
   function cmpClose() {
@@ -7438,36 +7463,51 @@ async function explainChart(chartKey) {
     cmpInput.setAttribute('aria-expanded', 'true');
     cmpMark(-1);
   }
+  // The suggestions for q, or [] when they cannot be had.
+  async function cmpSuggest(q) {
+    try {
+      const r = await fetch('/api/companies/suggest?q=' + encodeURIComponent(q));
+      const d = r.ok ? await r.json() : null;
+      return (d && d.results) || [];
+    } catch (_) { return []; }
+  }
   cmpInput.addEventListener('input', () => {
     clearTimeout(cmpTimer);
     const q = cmpInput.value.trim();
     if (!q) { cmpSeq++; cmpClose(); return; }
     cmpTimer = setTimeout(async () => {
       const seq = ++cmpSeq;
-      try {
-        const r = await fetch('/api/companies/suggest?q=' + encodeURIComponent(q));
-        const d = r.ok ? await r.json() : null;
-        if (seq === cmpSeq) cmpDraw((d && d.results) || []);
-      } catch (_) { /* typing a symbol and pressing Enter still works */ }
+      const items = await cmpSuggest(q);
+      if (seq === cmpSeq) cmpDraw(items);
     }, 160);
   });
-  cmpInput.addEventListener('keydown', e => {
+  cmpInput.addEventListener('keydown', async e => {
     const open = !cmpList.hidden && cmpItems.length;
     if (e.key === 'ArrowDown' && open) { e.preventDefault(); cmpMark((cmpActive + 1) % cmpItems.length); }
     else if (e.key === 'ArrowUp' && open) {
       e.preventDefault(); cmpMark(cmpActive <= 0 ? cmpItems.length - 1 : cmpActive - 1);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      // The highlighted suggestion; else one whose ticker is what was typed;
-      // else the first, since a name ("apple") is not itself a ticker. With
-      // no list showing, the typed symbol, which may be a foreign listing.
       const typed = cmpInput.value.trim().toUpperCase();
-      let pick = typed;
+      if (!typed) return;
       if (open) {
         const exact = cmpItems.find(it => it.ticker === typed);
-        pick = cmpActive >= 0 ? cmpItems[cmpActive].ticker : (exact || cmpItems[0]).ticker;
+        cmpPick(cmpActive >= 0 ? cmpItems[cmpActive].ticker : (exact || cmpItems[0]).ticker);
+        return;
       }
-      cmpPick(pick);
+      // No list showing, usually because Enter beat the suggestions. Ask now:
+      // a listing whose ticker is what was typed goes straight in; anything
+      // else opens the list on its first entry for a second Enter, so "TSMC"
+      // shows what it stands for instead of going in as a ticker. With no
+      // suggestion at all, the typed symbol, which may be a foreign listing.
+      clearTimeout(cmpTimer);
+      const seq = ++cmpSeq;
+      const items = await cmpSuggest(typed);
+      if (seq !== cmpSeq || cmpInput.value.trim().toUpperCase() !== typed) return;   // typed on, or left
+      if (items.some(it => it.ticker === typed)) { cmpPick(typed); return; }
+      cmpDraw(items);
+      if (cmpItems.length) cmpMark(0);
+      else cmpPick(typed);
     } else if (e.key === 'Escape' && open) { e.preventDefault(); cmpClose(); }
   });
   cmpInput.addEventListener('blur', () => { cmpSeq++; clearTimeout(cmpTimer); cmpClose(); });
@@ -7548,6 +7588,8 @@ async function explainChart(chartKey) {
     if (x) { expandChart('fund_' + x.dataset.fundExpand); return; }
     const add = e.target.closest('[data-fund-add]');
     if (add) { addCompare(add.dataset.fundAdd); return; }
+    const swap = e.target.closest('[data-fund-swap]');
+    if (swap) { swapCompare(swap.dataset.fundSwap, swap.dataset.fundTo); return; }
     const rm = e.target.closest('[data-fund-remove]');
     if (rm) { removeCompare(rm.dataset.fundRemove); return; }
     if (e.target.closest('[data-fund-retry]')) load(true);

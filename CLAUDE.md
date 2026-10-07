@@ -365,7 +365,9 @@ Each app follows the same pattern:
   below.
 - `symbols.py` — the ticker box on `/agents`: Yahoo's search as suggestions,
   and the price check that refuses a ticker with no prices before it costs a
-  run. See "The ticker box" below.
+  run. See "The ticker box" below. It also feeds the Fundamentals tab's compare
+  box, the other way round: local lists first, then Yahoo (see "Comparing
+  companies").
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -1758,12 +1760,32 @@ own, through the same bounded poll, and its chip shows its state.
   as on the single card. INTC's 1,149× from a year ago reads "n/m", negative
   trailing earnings. A ratio card is capped at 4× the median across all the
   companies.
-- **Suggestions.** `/api/companies/suggest` is public, like the tab, because
-  no request leaves the box. It searches SEC's list and the followed companies
-  (`symbols.local_matches`), one row per ticker: SEC's order and exchange, and
-  the ticker cache's name. Enter takes the highlighted suggestion, else an
-  exact one, else the first, since a name is not a ticker. With no list
-  showing it takes the typed symbol, so 7203.T can be added.
+- **Suggestions, local first.** `/api/companies/suggest` searches SEC's list
+  and the followed companies (`symbols.local_matches`), one row per ticker:
+  SEC's order and exchange, and the ticker cache's name. There are three tiers:
+  tickers starting with the query; names whose initials start with it, for one
+  word of three letters or more; names containing it, punctuation aside
+  ("coca-cola" finds COCA COLA CO). The middle tier was added for "TSMC ticker
+  should have auto complete" (2026-10-06): TSMC is Taiwan Semiconductor
+  Manufacturing Co, ticker TSM, and no ticker or name contains it.
+- **Then Yahoo, companies only.** While the local list is short of eight,
+  Yahoo's search fills it (`symbols.quotes`, `COMPANY_TYPES`). It finds a
+  renamed brand ("google" is GOOG) or a listing SEC lacks. It is second
+  because it does not know TSMC is TSM. Asked from the box, it answered with
+  São Paulo and Buenos Aires receipts, Tesmec (TSMCF, another company), crypto
+  tokens and a Korean ETF. The route is public like the tab, so each query sent
+  to Yahoo spends one of `SUGGEST_DAILY_SEARCHES` (1000 a day, quota.py's
+  counter). A query asked within six hours spends nothing, and past the cap the
+  local lists answer alone. The cached answer is shared with the agents box,
+  which keeps Yahoo first.
+- **Enter.** It takes the highlighted suggestion, else an exact one, else the
+  first, since a name or an abbreviation is not a ticker. With no list showing
+  (Enter beat the suggestions) it asks first. An exact ticker goes in;
+  otherwise the list opens on its first entry, for a second Enter; with no
+  suggestion at all the typed symbol goes in, so 7203.T can still be added.
+- **A dead symbol offers what it meant.** A compared symbol with nothing behind
+  it (`unavailable` or `invalid`, such as `?compare=TSMC` from an old link)
+  shows "did you mean" and up to two suggestions, each a one-click swap.
 - **CSV.** It exports every company in the window, one row per company and
   period, with both the calendar period and the company's own.
 
@@ -1795,7 +1817,7 @@ Tests: `tests/test_xbrl.py` (57, NVIDIA's filings), `tests/test_statements.py`
 range/YoY/cap arithmetic, the calendar alignment, and the poll read out of the
 template), `node tests/check_fundamentals_loading.mjs` (72, the loading panel
 read out of the template, against the real i18n.js and fake timers),
-`tests/check_fundamentals_endpoints.py` (30,
+`tests/check_fundamentals_endpoints.py` (33,
 hermetic, including the suggestions and the compare row), `tests/test_directory.py` (13, SEC's real rows),
 `tests/check_companies_directory.py` (6, hermetic),
 `tests/test_research_long_history.py` (5) with
@@ -2123,8 +2145,9 @@ the job's `log`, after `agents.STDERR_MARK`. The job API serves
 `agents.public_log(log)`, which cuts it there, so runs recorded before the
 change are clean too. The error line above it says what went wrong.
 
-Tests: `tests/test_symbols.py` (18, on Yahoo's answers as served to the box, in
-`tests/fixtures/symbols/yahoo.json`) and `tests/check_agents_ticker.py` (8,
+Tests: `tests/test_symbols.py` (30, on Yahoo's answers as served to the box, in
+`tests/fixtures/symbols/yahoo.json`, including the compare box's tiers and
+Yahoo's answer for "TSMC") and `tests/check_agents_ticker.py` (8,
 hermetic: the refusal before the quota, the fallbacks, the job API's log, the
 gate, the page's combobox).
 

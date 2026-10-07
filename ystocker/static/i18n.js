@@ -734,6 +734,7 @@ const I18n = (() => {
     'fund.cmp_loading':     { en: 'loading…', zh: '加载中…' },
     'fund.cmp_failed':      { en: 'couldn’t load', zh: '加载失败' },
     'fund.cmp_unavailable': { en: 'no filings found', zh: '未找到财报' },
+    'fund.cmp_did_you_mean': { en: 'did you mean', zh: '是否要找' },
     'fund.cmp_remove':      { en: 'Remove {t}', zh: '移除 {t}' },
     'fund.cmp_max':         { en: 'Up to {n} companies at once.', zh: '最多同时对比 {n} 家公司。' },
     'fund.cmp_currency':    { en: 'reports in {cur}, not on this axis', zh: '以 {cur} 报告，不在此坐标中' },
