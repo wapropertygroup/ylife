@@ -158,24 +158,31 @@ def _initials(folded: str) -> str:
     return "".join(word[0] for word in folded.split())
 
 
-def local_matches(query: str, rows: list[tuple[str, str, str]]) -> list[dict[str, Any]]:
+def local_matches(query: str, rows: list[tuple]) -> list[dict[str, Any]]:
     """Suggestions from a local list of ``(ticker, name, exchange)``, in three
     tiers: tickers starting with the query; then, for one word of three letters
     or more, names whose initials start with it ("TSMC" is Taiwan Semiconductor
     Manufacturing Co, ticker TSM, whose name and ticker hold no "TSMC"); then
-    names containing it, punctuation aside. Within a tier, the rows' order."""
+    names containing it, punctuation aside. Within a tier, the rows' order.
+
+    A row may carry a fourth element, other names to match but not show: the
+    compare box shows the ticker cache's name, which is Yahoo's short name and
+    can be cut at 31 characters ("Taiwan Semiconductor Manufactur", initials
+    TSM), so SEC's full name rides along for matching."""
     q = query.strip().upper()
     if not q:
         return []
     folded = _fold(q)
     abbreviation = folded if len(folded) >= 3 and folded.isalpha() else ""
-    names = [_fold(r[1]) for r in rows] if folded else []
+    names = [[_fold(n) for n in (r[1], *(r[3] if len(r) > 3 else ()))] for r in rows] if folded else []
     prefix = [r for r in rows if r[0].startswith(q)]
-    initials = [r for r, n in zip(rows, names) if abbreviation and _initials(n).startswith(abbreviation)]
-    named = [r for r, n in zip(rows, names) if folded in n]
+    initials = [r for r, ns in zip(rows, names)
+                if abbreviation and any(_initials(n).startswith(abbreviation) for n in ns)]
+    named = [r for r, ns in zip(rows, names) if any(folded in n for n in ns)]
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for ticker, name, exchange in prefix + initials + named:
+    for row in prefix + initials + named:
+        ticker, name, exchange = row[0], row[1], row[2]
         if ticker in seen:
             continue
         seen.add(ticker)

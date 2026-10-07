@@ -4426,14 +4426,17 @@ def api_companies_suggest():
         return jsonify({"results": [], "sources": []})
     # One row per ticker: SEC's order (roughly largest first) and exchange, the
     # ticker cache's name where it has one, which reads better than SEC's legal
-    # name; then the followed listings SEC does not know (7203.T).
+    # name; then the followed listings SEC does not know (7203.T). SEC's name
+    # is still matched: the cache's is Yahoo's short name, cut at 31 characters,
+    # and "Taiwan Semiconductor Manufactur" has the initials TSM, not TSMC.
     rows: dict[str, list] = {}
     got = directory.peek()
     for r in (got or {}).get("rows") or []:
-        rows.setdefault(r["t"], [r["t"], r["n"], r["x"]])
+        rows.setdefault(r["t"], [r["t"], r["n"], r["x"], []])
     for ticker, name, _ in _followed_rows():
-        row = rows.setdefault(ticker, [ticker, name, ""])
-        if name:
+        row = rows.setdefault(ticker, [ticker, name, "", []])
+        if name and name != row[1]:
+            row[3].append(row[1])
             row[1] = name
     found = [tuple(r) for r in rows.values() if fundamentals.normalise(r[0])]
     results, sources = symbols.local_matches(query, found), ["local"]

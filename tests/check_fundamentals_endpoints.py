@@ -466,9 +466,14 @@ class Page(unittest.TestCase):
     def test_an_abbreviation_finds_its_company_before_yahoo(self):
         from unittest import mock
 
-        from ystocker import directory, quota, symbols
+        from ystocker import directory, quota, routes, symbols
         spent = []
+        # As on the box: the ticker cache names TSM by Yahoo's short name, cut
+        # at 31 characters, whose initials are TSM. The first deploy of this
+        # matched that name only, and TSMC found nothing local in production.
+        cut = [("TSM", "Taiwan Semiconductor Manufactur", "")]
         with mock.patch.object(directory, "peek", return_value=self._TSM_SEC), \
+                mock.patch.object(routes, "_followed_rows", return_value=cut), \
                 mock.patch.object(symbols, "_searches", {}), \
                 mock.patch.object(symbols, "_get", return_value=self._yahoo("search_TSMC")) as get, \
                 mock.patch.object(quota, "try_consume_suggest_search",
@@ -476,7 +481,7 @@ class Page(unittest.TestCase):
             got = self.client.get("/api/companies/suggest?q=TSMC").get_json()
             again = self.client.get("/api/companies/suggest?q=tsmc").get_json()
         tickers = [r["ticker"] for r in got["results"]]
-        self.assertEqual(tickers[0], "TSM")
+        self.assertEqual((tickers[0], got["results"][0]["name"]), ("TSM", "Taiwan Semiconductor Manufactur"))
         # Then Yahoo's companies: no tokens, no fund.
         self.assertEqual(tickers[1:], ["TSMC34.SA", "TSMC.BA", "TSMCF"])
         self.assertEqual(got["sources"], ["local", "yahoo"])

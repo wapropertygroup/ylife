@@ -98,6 +98,16 @@ class CompareBoxTests(unittest.TestCase):
         self.assertEqual(_tickers(symbols.local_matches("tsmc", self.ROWS)), ["TSM"])
         self.assertEqual(_tickers(symbols.local_matches("BMS", self.ROWS)), ["BMY"])
 
+    def test_a_cut_short_name_is_matched_by_its_full_one(self):
+        # Production's ticker cache names TSM by Yahoo's short name, cut at 31
+        # characters: initials TSM. Shown, but SEC's full name is what matches.
+        rows = [("TSM", "Taiwan Semiconductor Manufactur", "NYSE",
+                 ["TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"])]
+        found = symbols.local_matches("TSMC", rows)
+        self.assertEqual([(f["ticker"], f["name"]) for f in found],
+                         [("TSM", "Taiwan Semiconductor Manufactur")])
+        self.assertEqual(symbols.local_matches("TSMC", [rows[0][:3]]), [])
+
     def test_initials_need_three_letters_in_one_word(self):
         # "TS" is two tickers' start, not an abbreviation.
         self.assertEqual(_tickers(symbols.local_matches("TS", self.ROWS)), ["TSM", "TSLA"])

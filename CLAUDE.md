@@ -1767,7 +1767,12 @@ own, through the same bounded poll, and its chip shows its state.
   word of three letters or more; names containing it, punctuation aside
   ("coca-cola" finds COCA COLA CO). The middle tier was added for "TSMC ticker
   should have auto complete" (2026-10-06): TSMC is Taiwan Semiconductor
-  Manufacturing Co, ticker TSM, and no ticker or name contains it.
+  Manufacturing Co, ticker TSM, and no ticker or name contains it. SEC's full
+  name is matched even where the ticker cache's name is shown. The cache's name
+  is Yahoo's short name, cut at 31 characters: "Taiwan Semiconductor
+  Manufactur" has the initials TSM. The first deploy matched only that one, and
+  TSMC found nothing local in production, while the preview (no cached name)
+  found TSM.
 - **Then Yahoo, companies only.** While the local list is short of eight,
   Yahoo's search fills it (`symbols.quotes`, `COMPANY_TYPES`). It finds a
   renamed brand ("google" is GOOG) or a listing SEC lacks. It is second
@@ -2145,7 +2150,7 @@ the job's `log`, after `agents.STDERR_MARK`. The job API serves
 `agents.public_log(log)`, which cuts it there, so runs recorded before the
 change are clean too. The error line above it says what went wrong.
 
-Tests: `tests/test_symbols.py` (30, on Yahoo's answers as served to the box, in
+Tests: `tests/test_symbols.py` (31, on Yahoo's answers as served to the box, in
 `tests/fixtures/symbols/yahoo.json`, including the compare box's tiers and
 Yahoo's answer for "TSMC") and `tests/check_agents_ticker.py` (8,
 hermetic: the refusal before the quota, the fallbacks, the job API's log, the
