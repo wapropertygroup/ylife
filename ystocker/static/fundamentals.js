@@ -173,10 +173,92 @@
     return null;
   }
 
+  // ── Comparing companies ────────────────────────────────────────────────────
+  // Several companies on one chart need one axis, and their fiscal years end in
+  // different months: NVIDIA's quarter to 26 Jul 2026 runs May to July, Intel's
+  // to 27 Jun runs April to June. Each period is placed by its midpoint, so
+  // both are calendar Q2. Placed by end date, NVIDIA's would be Q3, a quarter
+  // off.
+
+  /**
+   * The calendar period a fiscal one falls in: "2026Q2" for a quarter, or for a
+   * TTM ending with that quarter (pass the quarter's own start), "2025" for a
+   * year. A missing start is taken as a quarter or a year before the end.
+   */
+  function calendarKey(start, end, view) {
+    var e = parseDay(end);
+    var s = start ? parseDay(start) : e - (view === 'annual' ? 364 : 90) * DAY;
+    var mid = new Date((s + e) / 2);
+    var y = mid.getUTCFullYear();
+    if (view === 'annual') return String(y);
+    return y + 'Q' + (Math.floor(mid.getUTCMonth() / 3) + 1);
+  }
+
+  /** "2026Q2" -> "Q2 '26", "2025" -> "2025": an axis label. */
+  function calendarLabel(key) {
+    var m = /^(\d{4})Q([1-4])$/.exec(String(key || ''));
+    return m ? 'Q' + m[2] + " '" + m[1].slice(2) : String(key || '');
+  }
+
+  function keyNumber(key) {
+    var m = /^(\d{4})(?:Q([1-4]))?$/.exec(String(key || ''));
+    if (!m) return null;
+    return m[2] ? (+m[1]) * 4 + (+m[2] - 1) : +m[1];
+  }
+
+  function keyOf(n, annual) {
+    return annual ? String(n) : Math.floor(n / 4) + 'Q' + (n % 4 + 1);
+  }
+
+  /**
+   * The calendar periods a comparison shows: every period from the oldest to
+   * the newest that any company has, cut to `range` back from the newest. A
+   * period nobody filed for is kept, so it draws as a gap rather than closing
+   * one up. `keyLists` holds each company's keys for periods with figures.
+   */
+  function calendarWindow(keyLists, range, annual) {
+    var newest = -Infinity, oldest = Infinity;
+    keyLists.forEach(function (keys) {
+      keys.forEach(function (k) {
+        var n = keyNumber(k);
+        if (n === null) return;
+        if (n > newest) newest = n;
+        if (n < oldest) oldest = n;
+      });
+    });
+    if (newest === -Infinity) return [];
+    var years = RANGE_YEARS[range] || RANGE_YEARS['10y'];
+    var first = years === Infinity ? oldest : Math.max(oldest, newest - years * (annual ? 1 : 4) + 1);
+    var out = [];
+    for (var n = first; n <= newest; n++) out.push(keyOf(n, annual));
+    return out;
+  }
+
+  /**
+   * One company's periods laid on `keys`: for each key, the index of the
+   * period that falls in it, or null. Should two fall in one calendar period
+   * (a changed fiscal year), the one with a figure wins, then the later.
+   */
+  function alignTo(keys, periodKeys, values, ends) {
+    var at = {};
+    for (var i = 0; i < periodKeys.length; i++) {
+      var k = periodKeys[i];
+      if (!(k in at)) { at[k] = i; continue; }
+      var j = at[k];
+      var better = isNum(values[i]) !== isNum(values[j])
+        ? isNum(values[i])
+        : parseDay(ends[i]) > parseDay(ends[j]);
+      if (better) at[k] = i;
+    }
+    return keys.map(function (k) { return k in at ? at[k] : null; });
+  }
+
   var api = {
     format: format, axis: axis, tick: tick, money: money,
     window: window_, yearAgo: yearAgo, change: change,
     median: median, capRatios: capRatios, latest: latest,
+    calendarKey: calendarKey, calendarLabel: calendarLabel,
+    calendarWindow: calendarWindow, alignTo: alignTo,
     RANGE_YEARS: RANGE_YEARS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -1730,10 +1730,53 @@ carries over. /history's header carries the same star.
 - **Markup.** The star sits beside the card's link in a `.co-cell`, not inside
   it: a button inside an `<a>` is invalid, and its click would follow the link.
 
+**Comparing companies (2026-10-06).** Asked for: "support to add another
+several companies to compare". A row under the tab's header adds up to four
+others, five companies in all. They come from the add box, whose suggestions
+are `/api/companies/suggest`, or from one-click chips for the ticker's peer
+group (`/api/peers`). The set rides in the address,
+`?tab=fundamentals&compare=AMD,NVDA`. Each company is fetched like the page's
+own, through the same bounded poll, and its chip shows its state.
+- **Cards.** With another company loaded, every card becomes one line per
+  company. The multi-series cards split into one card per series (gross,
+  operating and net margin; cash and debt; R&D and stock comp; buybacks and
+  dividends), with titles of their own (`fund.t_*`) where the legend's
+  "Gross" would not stand alone. Each card lists every company's latest
+  figure, its change on a year ago and its own fiscal period.
+- **Calendar quarters, by midpoint** (`Fundamentals.calendarKey`). NVIDIA's
+  quarter to 26 Jul and Intel's to 27 Jun both cover the spring, so both are
+  calendar Q2. Placed by end date, NVIDIA's would be Q3. A quarter nobody
+  filed for stays on the axis as a gap (`calendarWindow`). A fiscal year
+  ending mid-year lands on the calendar year it starts in.
+- **Currency.** A company that reports in another currency (TSM, in TWD)
+  stays off the money and per-share cards. Its row says so, rather than its
+  figures being drawn on a USD axis. Margins, growth, ROE and multiples have
+  no currency and include it. A 20-F filer has only annual figures, and its
+  row says that in the quarterly view.
+- **Multiples.** A P/E stands for the company's newest period or not at all,
+  as on the single card. INTC's 1,149× from a year ago reads "n/m", negative
+  trailing earnings. A ratio card is capped at 4× the median across all the
+  companies.
+- **Suggestions.** `/api/companies/suggest` is public, like the tab, because
+  no request leaves the box. It searches SEC's list and the followed companies
+  (`symbols.local_matches`), one row per ticker: SEC's order and exchange, and
+  the ticker cache's name. Enter takes the highlighted suggestion, else an
+  exact one, else the first, since a name is not a ticker. With no list
+  showing it takes the typed symbol, so 7203.T can be added.
+- **CSV.** It exports every company in the window, one row per company and
+  period, with both the calendar period and the company's own.
+
+**A cold ticker used to draw an empty tab.** The poll took any `Response.ok`
+answer as the payload, and that includes the 202 "still reading". `render()`
+then cleared the status line and failed on the missing periods, so the poll
+never ran. `fetchFundamentals` now takes only a 200, and the page and every
+compared company share it.
+
 Tests: `tests/test_xbrl.py` (57, NVIDIA's filings), `tests/test_statements.py`
-(12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (40, the
-range/YoY/cap arithmetic), `tests/check_fundamentals_endpoints.py` (23,
-hermetic), `tests/test_directory.py` (13, SEC's real rows),
+(12, Yahoo's tables as served), `node tests/check_fundamentals_js.mjs` (69, the
+range/YoY/cap arithmetic, the calendar alignment, and the poll read out of the
+template), `tests/check_fundamentals_endpoints.py` (30,
+hermetic, including the suggestions and the compare row), `tests/test_directory.py` (13, SEC's real rows),
 `tests/check_companies_directory.py` (6, hermetic),
 `tests/test_research_long_history.py` (5) with
 `node tests/check_research_long_history.mjs` (16, `_longHistory` extracted from

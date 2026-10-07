@@ -4379,6 +4379,38 @@ def companies():
                            fetch_errors=[])
 
 
+@bp.route("/api/companies/suggest")
+def api_companies_suggest():
+    """Companies to add to a comparison on the Fundamentals tab.
+
+    Searched in what this box already holds: the followed companies and SEC's
+    list (``symbols.local_matches``: tickers starting with the query, then
+    names containing it). No request leaves the box, which is why it can be
+    public, as the tab is. A listing in neither, such as 7203.T, is still added
+    by typing its symbol and pressing Enter.
+    """
+    from ystocker import directory, fundamentals, symbols
+
+    query = " ".join(str(request.args.get("q", "") or "").split())[:40]
+    if not query:
+        return jsonify({"results": []})
+    # One row per ticker: SEC's order (roughly largest first) and exchange, the
+    # ticker cache's name where it has one, which reads better than SEC's legal
+    # name; then the followed listings SEC does not know (7203.T).
+    rows: dict[str, list] = {}
+    got = directory.peek()
+    for r in (got or {}).get("rows") or []:
+        rows.setdefault(r["t"], [r["t"], r["n"], r["x"]])
+    for ticker, name, _ in _followed_rows():
+        row = rows.setdefault(ticker, [ticker, name, ""])
+        if name:
+            row[1] = name
+    found = [tuple(r) for r in rows.values() if fundamentals.normalise(r[0])]
+    resp = jsonify({"results": symbols.local_matches(query, found)})
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
 @bp.route("/api/companies/directory")
 def api_companies_directory():
     """Every company listed with the SEC, for /companies' full directory.

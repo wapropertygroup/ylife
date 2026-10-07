@@ -92,6 +92,93 @@ eq('latest skips trailing gaps', F.latest([1, 2, null], [0, 1, 2]), 1);
 eq('latest within the window only', F.latest([1, 2, 3], [0, 1]), 1);
 eq('nothing is null', F.latest([null, null], [0, 1]), null);
 
+// Comparing companies (asked 2026-10-06). Fiscal years end in different
+// months, so periods are placed by their midpoint on calendar quarters. Placed
+// by end date, NVIDIA's quarter to late July would sit a quarter after Intel's
+// to late June, when both cover the same spring.
+console.log('calendarKey / calendarLabel');
+eq("Intel's quarter to 27 Jun is calendar Q2", F.calendarKey('2026-03-29', '2026-06-27', 'quarterly'), '2026Q2');
+eq("NVIDIA's quarter to 26 Jul is calendar Q2 too", F.calendarKey('2026-04-27', '2026-07-26', 'quarterly'), '2026Q2');
+eq('by end date it would have been Q3', F.calendarKey('2026-07-01', '2026-07-26', 'quarterly'), '2026Q3');
+eq("NVIDIA's FY2026 (to Jan 2026) is calendar 2025", F.calendarKey('2025-01-27', '2026-01-25', 'annual'), '2025');
+eq("Intel's FY2025 is calendar 2025", F.calendarKey('2024-12-29', '2025-12-27', 'annual'), '2025');
+eq('a missing start is taken as a quarter before the end', F.calendarKey('', '2026-06-27', 'quarterly'), '2026Q2');
+eq('a quarter label', F.calendarLabel('2026Q2'), "Q2 '26");
+eq('a year label', F.calendarLabel('2025'), '2025');
+
+console.log('calendarWindow');
+const intelKeys = ['2024Q3', '2024Q4', '2025Q1', '2025Q2', '2025Q3', '2025Q4', '2026Q1', '2026Q2'];
+const nvdaKeys = ['2025Q2', '2025Q3', '2025Q4', '2026Q1', '2026Q2', '2026Q3'];
+const win = F.calendarWindow([intelKeys, nvdaKeys], 'max', false);
+eq('the window runs from the oldest to the newest any company has', [win[0], win[win.length - 1]], ['2024Q3', '2026Q3']);
+eq('every quarter between is there', win.length, 9);
+eq('3Y is twelve quarters back from the newest', F.calendarWindow([intelKeys, ['2015Q1', '2026Q3']], '3y', false),
+   ['2023Q4', '2024Q1', '2024Q2', '2024Q3', '2024Q4', '2025Q1', '2025Q2', '2025Q3', '2025Q4', '2026Q1', '2026Q2', '2026Q3']);
+eq('a quarter nobody filed for stays, as a gap', F.calendarWindow([['2025Q1', '2025Q3']], 'max', false),
+   ['2025Q1', '2025Q2', '2025Q3']);
+eq('annual windows count years', F.calendarWindow([['2019', '2025'], ['2024']], '3y', true), ['2023', '2024', '2025']);
+eq('no periods, no window', F.calendarWindow([[], []], '10y', false), []);
+
+console.log('alignTo');
+eq('each key finds its period, a gap finds nothing',
+   F.alignTo(['2025Q1', '2025Q2', '2025Q3'], ['2025Q1', '2025Q3'], [10, 30], ['2025-03-31', '2025-09-30']),
+   [0, null, 1]);
+eq('two periods in one quarter: the one with a figure wins',
+   F.alignTo(['2025Q2'], ['2025Q2', '2025Q2'], [12, null], ['2025-05-31', '2025-06-28']), [0]);
+eq('both with figures: the later one wins',
+   F.alignTo(['2025Q2'], ['2025Q2', '2025Q2'], [12, 13], ['2025-05-31', '2025-06-28']), [1]);
+eq('a key outside the company is null', F.alignTo(['2030Q1'], ['2025Q1'], [1], ['2025-03-31']), [null]);
+
+// The tab's poll, read out of history.html rather than copied. Response.ok is
+// true for a 202 as well, and the committed poll took the 202 "still reading"
+// answer for the payload: it wiped the status line and then failed on the
+// missing periods, so a cold ticker showed an empty tab (found 2026-10-06).
+console.log('fetchFundamentals');
+{
+  const { readFileSync } = await import('fs');
+  const tpl = readFileSync(path.join(root, 'ystocker/templates/history.html'), 'utf8');
+  const start = tpl.indexOf('async function fetchFundamentals(');
+  t('the poll is in the template', start >= 0);
+  let i = tpl.indexOf('{', start), depth = 0, end = -1;
+  for (let j = i; j < tpl.length; j++) {
+    if (tpl[j] === '{') depth++;
+    else if (tpl[j] === '}' && --depth === 0) { end = j + 1; break; }
+  }
+  const src = tpl.slice(start, end);
+  const poll = (answers) => {
+    const asked = [], states = [];
+    const fakeFetch = async (url) => {
+      asked.push(url);
+      const a = answers.length > 1 ? answers.shift() : answers[0];
+      if (a === 'network') throw new Error('offline');
+      return { status: a.status, ok: a.status >= 200 && a.status < 300, json: async () => a.body };
+    };
+    const run = new Function('POLL_MS', 'fetch', 'setTimeout', src + '; return fetchFundamentals;')(
+      [0, 0, 0], fakeFetch, (fn) => fn());
+    return { asked, states, go: (retry) => run('INTC', retry, (s) => states.push(s)) };
+  };
+  const body = { quarterly: { end: ['2026-06-27'] } };
+  let p = poll([{ status: 202, body: { status: 'warming', queued: false } }, { status: 200, body }]);
+  let got = await p.go(false);
+  eq('a 202 is waited out, not taken for the payload', got, { payload: body });
+  eq('and the wait is reported', p.states, ['building']);
+  p = poll([{ status: 202, body: { status: 'warming', queued: true } }, { status: 200, body }]);
+  await p.go(false);
+  eq('no free slot is "queued"', p.states, ['queued']);
+  eq('a 400 is a ticker the filings cannot be looked up by',
+     await poll([{ status: 400, body: {} }]).go(false), { state: 'invalid' });
+  eq("a spent day's allowance says so",
+     await poll([{ status: 503, body: { reason: 'daily_cap' } }]).go(false), { state: 'capped' });
+  eq('a failure is failed', await poll([{ status: 503, body: { reason: 'x' } }]).go(false), { state: 'failed' });
+  eq('so is no network', await poll(['network']).go(false), { state: 'failed' });
+  p = poll([{ status: 202, body: { status: 'warming' } }]);
+  eq('a poll that never ends ends on timeout', await p.go(false), { state: 'timeout' });
+  eq('after a bounded number of asks', p.asked.length, 4);
+  p = poll([{ status: 200, body }]);
+  await p.go(true);
+  t('a retry asks for a rebuild once', p.asked[0].endsWith('?retry=1'), p.asked[0]);
+}
+
 if (failures.length) {
   console.log(`\n${failures.length} FAILED`);
   process.exit(1);

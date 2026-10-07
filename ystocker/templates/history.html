@@ -307,6 +307,48 @@
   .fd-notes { margin-top: 14px; padding-left: 1.1em; list-style: disc; font-size: 11.5px;
               color: var(--t-ink-dim); line-height: 1.6; }
   .fd-notes li { margin: 2px 0; }
+  /* Comparing companies: the row under the header (chips, the add box and its
+     suggestions, peers), and each card's one line per company. */
+  .fd-compare { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+                margin: -4px 0 14px; font-size: 12px; color: var(--t-ink-muted); }
+  .fd-compare-label { font-weight: 600; color: var(--t-ink-dim); margin-right: 2px; }
+  .fd-cmp-chips, .fd-peers { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .fd-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .fd-cmp-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+                 border: 1px solid var(--t-line-strong); border-radius: 999px; background: var(--t-surface);
+                 font-size: 11.5px; font-weight: 600; color: var(--t-ink-strong); }
+  .fd-cmp-state { font-weight: 500; font-size: 10.5px; color: var(--t-ink-dim); }
+  .fd-cmp-state.bad { color: var(--fd-down); }
+  .fd-cmp-x { border: 0; background: none; padding: 0 0 0 2px; cursor: pointer; line-height: 1;
+              font-size: 12px; color: var(--t-ink-dim); }
+  .fd-cmp-x:hover { color: var(--fd-down); }
+  .fd-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .fd-cmp-add { position: relative; }
+  .fd-cmp-add input { width: 160px; padding: 4px 10px; font-size: 12px; border-radius: 999px;
+                      border: 1px dashed var(--t-line-strong); background: transparent; color: var(--t-ink-strong); }
+  .fd-cmp-add input:focus { outline: none; border-style: solid; border-color: var(--t-accent-ink); }
+  .fd-cmp-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; min-width: 100%;
+                 width: max-content; max-width: min(380px, 88vw); margin: 0; padding: 4px; list-style: none;
+                 background: var(--t-surface); border: 1px solid var(--t-line-strong); border-radius: 10px;
+                 box-shadow: 0 12px 32px rgba(0,0,0,.18); }
+  .fd-cmp-opt { display: flex; align-items: baseline; gap: 8px; padding: 6px 9px; border-radius: 7px;
+                cursor: pointer; font-size: 12px; color: var(--t-ink-muted); white-space: nowrap; }
+  .fd-cmp-opt:hover, .fd-cmp-opt.is-active { background: rgba(99,102,241,.14); color: var(--t-ink-strong); }
+  .fd-cmp-opt .tk { font-weight: 600; color: var(--t-ink-strong); }
+  .fd-cmp-opt .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 230px; }
+  .fd-cmp-opt .ex { margin-left: auto; padding-left: 8px; font-size: 11px; opacity: .7; }
+  .fd-peer { border: 1px solid var(--t-line); border-radius: 999px; background: transparent;
+             padding: 2px 8px; font-size: 11px; font-weight: 600; color: var(--t-ink-muted); cursor: pointer; }
+  .fd-peer:hover { color: var(--t-ink-strong); border-color: var(--t-line-strong); }
+  .fd-cmp-note { font-size: 11px; color: var(--t-ink-dim); }
+  .fd-rows { margin-top: 4px; display: grid; gap: 1px; }
+  .fd-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 11.5px; }
+  .fd-row .fd-dot { align-self: center; }
+  .fd-row .tk { min-width: 3.4em; font-size: 11px; font-weight: 600; color: var(--t-ink-muted); }
+  .fd-row .v { font-weight: 700; color: var(--t-ink-strong); font-variant-numeric: tabular-nums; }
+  .fd-row .fd-chip { margin-left: 0; }
+  .fd-row .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+               font-size: 10.5px; color: var(--t-ink-dim); }
   /* The header's watchlist star when on: two classes outrank the button's one-class
      Tailwind ink whatever the order. */
   .hist-watch.is-on { color: #d97706; border-color: rgba(217,119,6,.45); }
@@ -1637,6 +1679,21 @@
       <button type="button" class="range-btn" data-fund-csv title="Download these figures as CSV"
               data-i18n-title="fund.csv_title" data-i18n="fund.csv">⬇ CSV</button>
     </div>
+  </div>
+  {# Other companies on the same charts, one line each, kept in the address as
+     ?compare=AMD,NVDA. Shown once this company's figures have loaded. #}
+  <div class="fd-compare" id="fundCompare" hidden>
+    <span class="fd-compare-label" data-i18n="fund.compare">Compare</span>
+    <span class="fd-cmp-chip fd-mono"><i class="fd-dot" id="fundSelfDot"></i>{{ ticker }}</span>
+    <span class="fd-cmp-chips" id="fundCmpChips"></span>
+    <span class="fd-cmp-add">
+      <input id="fundCmpInput" type="text" maxlength="40" autocomplete="off" spellcheck="false"
+             placeholder="+ Add a company" data-i18n-placeholder="fund.compare_ph"
+             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="fundCmpList">
+      <ul id="fundCmpList" class="fd-cmp-list" role="listbox" hidden></ul>
+    </span>
+    <span class="fd-peers" id="fundPeers"></span>
+    <span class="fd-cmp-note" id="fundCmpNote" hidden></span>
   </div>
   <div id="fundStatus" class="fd-status"></div>
   <div id="fundGrid" class="fd-grid"></div>
@@ -6487,29 +6544,40 @@ async function explainChart(chartKey) {
     el.innerHTML = `<span class="${pulse.trim()}">${esc(msg)}</span>${retry}`;
   }
 
+  // One company's payload through the bounded poll, this one or one being
+  // compared. onState is told each waiting state; the answer is {payload}, or
+  // {state} for how the poll ended. Only a 200 is a payload: Response.ok is
+  // true for the 202 "still reading" answer too, which used to be drawn as the
+  // payload, wiping the status line and then failing on its missing periods.
+  async function fetchFundamentals(sym, retry, onState) {
+    for (let attempt = 0; attempt <= POLL_MS.length; attempt++) {
+      let resp = null, data = null;
+      try {
+        const q = retry && attempt === 0 ? '?retry=1' : '';
+        resp = await fetch(`/api/fundamentals/${encodeURIComponent(sym)}${q}`);
+        data = await resp.json();
+      } catch (_) { /* network: falls through to failed */ }
+      if (resp && resp.status === 200 && data) return { payload: data };
+      if (resp && resp.status === 400) return { state: 'invalid' };
+      if (resp && resp.status === 503 && data && data.reason === 'daily_cap') return { state: 'capped' };
+      if (!resp || resp.status !== 202) return { state: 'failed' };
+      if (attempt === POLL_MS.length) break;
+      onState(data && data.queued ? 'queued' : 'building');
+      await new Promise(r => setTimeout(r, POLL_MS[attempt]));
+    }
+    // The poll is bounded, and its last state must be drawn: stopping the
+    // timer alone would leave "Reading…" on screen for ever.
+    return { state: 'timeout' };
+  }
+
   async function load(retry) {
     if (loading) return;
     loading = true;
     setStatus('loading');
     try {
-      for (let attempt = 0; attempt <= POLL_MS.length; attempt++) {
-        let resp = null, data = null;
-        try {
-          const q = retry && attempt === 0 ? '?retry=1' : '';
-          resp = await fetch(`/api/fundamentals/${encodeURIComponent(TICKER)}${q}`);
-          data = await resp.json();
-        } catch (_) { /* network: falls through to failed */ }
-        if (resp && resp.ok && data) { payload = data; render(); return; }
-        if (resp && resp.status === 400) { setStatus('invalid'); return; }
-        if (resp && resp.status === 503 && data && data.reason === 'daily_cap') { setStatus('capped'); return; }
-        if (!resp || resp.status !== 202) { setStatus('failed'); return; }
-        if (attempt === POLL_MS.length) break;
-        setStatus(data && data.queued ? 'queued' : 'building');
-        await new Promise(r => setTimeout(r, POLL_MS[attempt]));
-      }
-      // The poll is bounded, and its last state must be drawn: stopping the
-      // timer alone would leave "Reading…" on screen for ever.
-      setStatus('timeout');
+      const got = await fetchFundamentals(TICKER, retry, s => setStatus(s));
+      if (got.payload) { payload = got.payload; render(); return; }
+      setStatus(got.state);
     } finally {
       loading = false;
     }
@@ -6690,6 +6758,7 @@ async function explainChart(chartKey) {
     $('fundNotes').innerHTML = '';
     if (payload.unavailable) {
       $('fundControls').hidden = true;
+      $('fundCompare').hidden = true;
       $('fundSub').textContent = payload.entity || '';
       setStatus('unavailable', payload.unavailable);
       return;
@@ -6704,6 +6773,8 @@ async function explainChart(chartKey) {
     });
     document.querySelectorAll('[data-fund-range]').forEach(b => b.classList.toggle('active', b.dataset.fundRange === range));
     renderSub();
+    showCompareBar();
+    if (readyCompare().length) { renderCompare(annualOnly); return; }
 
     const src = source();
     const anchors = ['revenue', 'net_income'];
@@ -6780,9 +6851,10 @@ async function explainChart(chartKey) {
     el.innerHTML = html;
   }
 
-  function renderNotes(anyCapped, annualOnly) {
+  function renderNotes(anyCapped, annualOnly, comparing) {
     const notes = [];
     const b = payload.basis || {};
+    if (comparing) notes.push(tr('fund.note_compare', ''));
     if (b.taxonomy === 'yahoo') notes.push(tr('fund.note_yahoo', ''));
     else if (!annualOnly) notes.push(tr('fund.note_derived', ''));
     notes.push(tr(b.taxonomy === 'yahoo' ? 'fund.note_cash_yahoo' : 'fund.note_cash_sec', ''));
@@ -6793,45 +6865,441 @@ async function explainChart(chartKey) {
     $('fundNotes').innerHTML = notes.filter(Boolean).map(n => `<li>${esc(n)}</li>`).join('');
   }
 
+  // ── Comparing companies ────────────────────────────────────────────────────
+  // Up to COMPARE_MAX others (asked 2026-10-06: "support to add another several
+  // companies to compare"), each fetched as this one is and drawn one line per
+  // company. Periods line up by calendar quarter (Fundamentals.calendarKey), so
+  // fiscal years ending in different months compare like for like. A company
+  // reporting in another currency is left off the money and per-share charts
+  // rather than drawn on the wrong axis. The set rides in the address,
+  // ?compare=AMD,NVDA, so a comparison can be linked.
+  const COMPARE_MAX = 4;
+  const PALETTE = [CT.c('#38bdf8'), CT.c('#fbbf24'), CT.c('#a78bfa'), CT.c('#34d399'), CT.c('#fb7185')];
+  const SYMBOL_RE = /^[A-Z0-9^][A-Z0-9.\-^=]{0,14}$/;      // fundamentals._SYMBOL_RE
+  const compare = [];                                      // {ticker, color, state, payload}
+  let peers = null;                                        // the peer group's tickers, once fetched
+  // A multi-series card becomes one card per series: one line per company is
+  // all a chart can carry legibly. Its title is the series' own (fund.t_<m>)
+  // where the legend's short label ("Gross") would not stand alone.
+  const COMPARE_CARDS = [];
+  CARDS.forEach(card => card.metrics.forEach(metric => COMPARE_CARDS.push({
+    key: card.metrics.length > 1 ? metric : card.key, metric, kind: card.kind,
+    valuation: !!card.valuation, negate: !!card.negate, noChange: !!card.noChange,
+    title: card.metrics.length > 1 ? 'fund.t_' + metric : 'fund.card_' + card.key,
+    alt: card.metrics.length > 1 ? 'fund.s_' + metric : '',
+  })));
+  const cardTitle = card => tr(card.title, card.alt ? tr(card.alt, card.key) : card.key);
+
+  const readyCompare = () => compare.filter(c => c.state === 'ready');
+
+  function sourceOf(p) {
+    const q = p.quarterly, a = p.annual;
+    if (view === 'annual') return { ends: a.end, starts: a.start || [], labels: a.label, values: a.values };
+    if (view === 'ttm') return { ends: q.end, starts: q.start || [], labels: q.label, values: (p.ttm || {}).values || {} };
+    return { ends: q.end, starts: q.start || [], labels: q.label, values: q.values };
+  }
+
+  function seriesOf(p, src, metric, valuation) {
+    if (!valuation) return src.values[metric] || [];
+    const val = p.valuation;
+    if (!val) return src.ends.map(() => null);
+    if (view !== 'annual') return val[metric] || [];
+    const at = {};
+    p.quarterly.end.forEach((e, i) => { at[e] = i; });
+    return src.ends.map(e => (e in at ? (val[metric] || [])[at[e]] : null));
+  }
+
+  // This company and every compared one that has loaded, each with its
+  // periods' calendar keys, and the calendar periods the charts show.
+  function companies() {
+    const cos = [{ ticker: TICKER, color: PALETTE[0], payload }]
+      .concat(readyCompare().map(c => ({ ticker: c.ticker, color: c.color, payload: c.payload })));
+    cos.forEach(co => {
+      co.src = sourceOf(co.payload);
+      co.cur = (co.payload.basis || {}).currency || 'USD';
+      co.annualOnly = !co.payload.quarterly.end.length;
+      co.keys = co.src.ends.map((e, i) => F.calendarKey(co.src.starts[i], e, view));
+    });
+    const keys = F.calendarWindow(cos.map(co => co.keys.filter((k, i) =>
+      ['revenue', 'net_income'].some(m => typeof (co.src.values[m] || [])[i] === 'number'))),
+      range, view === 'annual');
+    return { cos, keys };
+  }
+
+  function calendarTitle(key) {
+    const m = /^(\d{4})Q([1-4])$/.exec(key);
+    if (m) return tr('fund.cmp_cal_q', 'Calendar Q{q} {y}').replace('{q}', m[2]).replace('{y}', m[1]);
+    return tr('fund.cmp_cal_y', 'Calendar {y}').replace('{y}', key);
+  }
+
+  function changeChip(values, ends, i, kind) {
+    const ch = F.change(values, ends, i, view, kind);
+    if (!ch) return '';
+    const up = (ch.rel !== undefined ? ch.rel : ch.pp) >= 0;
+    const txt = ch.rel !== undefined
+      ? `${up ? '+' : ''}${(ch.rel * 100).toFixed(Math.abs(ch.rel) < 0.1 ? 1 : 0)}%`
+      : `${up ? '+' : ''}${ch.pp.toFixed(1)}pp`;
+    return `<span class="fd-chip ${up ? 'up' : 'down'}">${esc(txt)}</span>`;
+  }
+
+  function buildCompareConfig(card, keys, lines, big) {
+    const cur = currency();
+    const drawn = lines.filter(l => l.has);
+    let cap = null;
+    if (card.valuation) cap = F.capRatios([].concat(...drawn.map(l => l.data)), 4).cap;
+    const datasets = drawn.map(l => ({
+      label: l.co.ticker, _line: l, _raw: l.data,
+      data: cap === null ? l.data : l.data.map(v => (typeof v === 'number' && v > cap ? cap : v)),
+      type: 'line', fill: false, tension: 0.2, spanGaps: false,
+      borderColor: l.co.color, backgroundColor: l.co.color,
+      borderWidth: l.co.ticker === TICKER ? 2.2 : 1.6,
+      pointRadius: keys.length > 24 ? 0 : 2, pointHoverRadius: 3,
+    }));
+    const tick = { color: CT.c('#64748b'), font: { size: big ? 11 : 9 } };
+    return {
+      type: 'line',
+      data: { labels: keys.map(F.calendarLabel), datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: big, labels: { color: CT.c('#94a3b8'), boxWidth: 10 } },
+          tooltip: {
+            callbacks: {
+              title: items => (items.length ? calendarTitle(keys[items[0].dataIndex]) : ''),
+              label: item => {
+                const l = item.dataset._line;
+                const i = l.map[item.dataIndex];
+                const raw = item.dataset._raw[item.dataIndex];
+                const v = card.negate && typeof raw === 'number' ? -raw : raw;
+                let text = `${l.co.ticker}: ${F.format(v, card.kind, l.co.cur)}`;
+                // The company's own period, since the axis is calendar periods.
+                if (i !== null) text += `  (${l.co.src.labels[i] || l.co.src.ends[i]})`;
+                if (cap !== null && typeof raw === 'number' && raw > cap) {
+                  text += ' — ' + tr('fund.cmp_capped', 'capped at 4× the median');
+                }
+                return text;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { grid: { display: false },
+               ticks: { ...tick, maxRotation: 0, autoSkip: true, maxTicksLimit: big ? 12 : 5 } },
+          y: { beginAtZero: true, max: cap === null ? undefined : cap * 1.04,
+               grid: { color: CT.c('#1e293b') },
+               ticks: { ...tick, maxTicksLimit: big ? 8 : 4, callback: v => F.axis(v, card.kind, cur) } },
+        },
+      },
+    };
+  }
+
+  function renderCompare(annualOnly) {
+    const grid = $('fundGrid');
+    const cur = currency();
+    const { cos, keys } = companies();
+    const missing = [];
+    let anyCapped = false;
+    COMPARE_CARDS.forEach(card => {
+      const perShareOrMoney = card.kind === 'money' || card.kind === 'eps';
+      const lines = cos.map(co => {
+        const vals = seriesOf(co.payload, co.src, card.metric, card.valuation);
+        const map = F.alignTo(keys, co.keys, vals, co.src.ends);
+        const usable = !perShareOrMoney || co.cur === cur;
+        let data = map.map(i => (i === null ? null : vals[i]));
+        if (card.negate) data = data.map(v => (typeof v === 'number' ? -v : v));
+        return { co, vals, map, usable, data, has: usable && data.some(v => typeof v === 'number') };
+      });
+      if (!lines.some(l => l.has)) { missing.push(cardTitle(card)); return; }
+      const rows = lines.map(l => {
+        const dot = `<i class="fd-dot" style="background:${l.co.color}"></i>`;
+        const tk = `<span class="tk fd-mono">${esc(l.co.ticker)}</span>`;
+        if (!l.usable) {
+          return `<div class="fd-row">${dot}${tk}<span class="n">${esc(
+            tr('fund.cmp_currency', 'reports in {cur}, not on this axis').replace('{cur}', l.co.cur))}</span></div>`;
+        }
+        let k = null;
+        for (let j = l.map.length - 1; j >= 0; j--) {
+          if (typeof l.data[j] === 'number') { k = j; break; }
+        }
+        // A multiple stands for the newest period or not at all, as on the
+        // single card: INTC's 1,149× from a year ago is not its P/E today.
+        if (card.valuation) {
+          let last = null;
+          for (let j = l.map.length - 1; j >= 0; j--) {
+            if (l.map[j] !== null) { last = j; break; }
+          }
+          if (last !== null && last !== k) {
+            const i = l.map[last];
+            const eps = ((view === 'annual' ? l.co.payload.annual : l.co.payload.ttm) || {}).values || {};
+            const loss = card.metric === 'pe' && typeof (eps.eps || [])[i] === 'number' && eps.eps[i] <= 0;
+            const why = loss ? tr('fund.pe_nm', 'not meaningful: trailing earnings are negative')
+              : tr('fund.na', 'not available for this period');
+            return `<div class="fd-row">${dot}${tk}<span class="v">${loss ? 'n/m' : '—'}</span>`
+              + `<span class="n">${esc((l.co.src.labels[i] || l.co.src.ends[i]) + ' · ' + why)}</span></div>`;
+          }
+        }
+        if (k === null) {
+          const why = l.co.annualOnly && view !== 'annual'
+            ? tr('fund.cmp_annual_only', 'annual figures only') : '—';
+          return `<div class="fd-row">${dot}${tk}<span class="n">${esc(why)}</span></div>`;
+        }
+        const i = l.map[k];
+        const chip = card.noChange || card.valuation ? '' : changeChip(l.vals, l.co.src.ends, i, card.kind);
+        return `<div class="fd-row">${dot}${tk}<span class="v">${esc(F.format(l.vals[i], card.kind, l.co.cur))}</span>`
+          + `${chip}<span class="n">${esc(l.co.src.labels[i] || l.co.src.ends[i])}</span></div>`;
+      }).join('');
+      const title = cardTitle(card);
+      const el = document.createElement('div');
+      el.className = 'fd-card';
+      el.innerHTML = `
+        <div class="fd-card-head">
+          <div class="fd-card-title">${esc(title)}</div>
+          <button type="button" class="expand-btn" data-fund-expand="${card.key}" title="${esc(tr('fund.expand', 'Expand'))}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+          </button>
+        </div>
+        <div class="fd-rows">${rows}</div>
+        <div class="fd-canvas"><canvas></canvas></div>`;
+      grid.appendChild(el);
+      const cfg = buildCompareConfig(card, keys, lines, false);
+      if (cfg.options.scales.y.max !== undefined) anyCapped = true;
+      charts['cmp_' + card.key] = new Chart(el.querySelector('canvas'), cfg);
+      const names = cos.map(co => co.ticker).join(' · ');
+      _registerChart('fund_' + card.key, { _title: `${names} · ${title}`, _desc: subText(),
+        _rebuild: () => buildCompareConfig(card, keys, lines, true) }, charts['cmp_' + card.key]);
+    });
+    if (missing.length) {
+      $('fundMissing').textContent = `${tr('fund.cmp_none', 'Not in these companies’ filings:')} ${missing.join(', ')}`;
+      $('fundMissing').hidden = false;
+    }
+    renderNotes(anyCapped, annualOnly, true);
+  }
+
+  function writeCompareToAddress() {
+    try {
+      const u = new URL(location.href);
+      if (compare.length) u.searchParams.set('compare', compare.map(c => c.ticker).join(','));
+      else u.searchParams.delete('compare');
+      if (u.href !== location.href) history.replaceState(history.state, '', u);
+    } catch (_) { /* an address that cannot be rewritten keeps the comparison anyway */ }
+  }
+
+  function showCompareBar() {
+    $('fundCompare').hidden = false;
+    $('fundSelfDot').style.background = PALETTE[0];
+    if (peers === null) {
+      peers = [];
+      fetch(`/api/peers/${encodeURIComponent(TICKER)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { peers = ((d && d.peers) || []).map(p => p.ticker).slice(0, 8); drawCompareBar(); })
+        .catch(() => {});
+    }
+    drawCompareBar();
+  }
+
+  function drawCompareBar() {
+    const states = {
+      loading: tr('fund.cmp_loading', 'loading…'), building: tr('fund.cmp_loading', 'loading…'),
+      queued: tr('fund.cmp_loading', 'loading…'),
+      unavailable: tr('fund.cmp_unavailable', 'no filings found'),
+      capped: tr('fund.cmp_failed', 'couldn’t load'), failed: tr('fund.cmp_failed', 'couldn’t load'),
+      timeout: tr('fund.cmp_failed', 'couldn’t load'), invalid: tr('fund.cmp_unavailable', 'no filings found'),
+    };
+    $('fundCmpChips').innerHTML = compare.map(c => {
+      const state = c.state === 'ready' ? ''
+        : `<span class="fd-cmp-state${c.state === 'loading' || c.state === 'building' || c.state === 'queued' ? '' : ' bad'}">${esc(states[c.state] || '')}</span>`;
+      const remove = tr('fund.cmp_remove', 'Remove {t}').replace('{t}', c.ticker);
+      return `<span class="fd-cmp-chip fd-mono"><i class="fd-dot" style="background:${c.color}"></i>`
+        + `<a href="/history/${encodeURIComponent(c.ticker)}?tab=fundamentals">${esc(c.ticker)}</a>${state}`
+        + `<button type="button" class="fd-cmp-x" data-fund-remove="${esc(c.ticker)}" title="${esc(remove)}" aria-label="${esc(remove)}">✕</button></span>`;
+    }).join('');
+    const offered = (peers || []).filter(t => t !== TICKER && !compare.some(c => c.ticker === t));
+    const room = compare.length < COMPARE_MAX;
+    $('fundPeers').innerHTML = room && offered.length
+      ? `<span class="fd-compare-label">${esc(tr('fund.peers', 'Peers:'))}</span>`
+        + offered.map(t => `<button type="button" class="fd-peer fd-mono" data-fund-add="${esc(t)}">+ ${esc(t)}</button>`).join('')
+      : '';
+    $('fundCmpInput').disabled = !room;
+    const note = $('fundCmpNote');
+    note.hidden = room;
+    note.textContent = room ? '' : tr('fund.cmp_max', 'Up to {n} companies at once.').replace('{n}', COMPARE_MAX + 1);
+  }
+
+  function addCompare(raw) {
+    const sym = String(raw || '').trim().toUpperCase();
+    if (!SYMBOL_RE.test(sym) || sym === TICKER || compare.some(c => c.ticker === sym)) return false;
+    if (compare.length >= COMPARE_MAX) return false;
+    const color = PALETTE.slice(1).find(p => !compare.some(c => c.color === p)) || PALETTE[1];
+    const entry = { ticker: sym, color, state: 'loading', payload: null };
+    compare.push(entry);
+    writeCompareToAddress();
+    if (payload) drawCompareBar();
+    fetchFundamentals(sym, false, s => { entry.state = s; if (payload) drawCompareBar(); }).then(got => {
+      if (!compare.includes(entry)) return;              // removed while loading
+      if (got.payload && !got.payload.unavailable) { entry.payload = got.payload; entry.state = 'ready'; }
+      else entry.state = got.payload ? 'unavailable' : got.state;
+      render();
+    });
+    return true;
+  }
+
+  function removeCompare(sym) {
+    const k = compare.findIndex(c => c.ticker === sym);
+    if (k < 0) return;
+    compare.splice(k, 1);
+    writeCompareToAddress();
+    render();
+  }
+
+  // The add box's suggestions: /api/companies/suggest, from the followed
+  // companies and SEC's list. Enter adds the highlighted one, or what was
+  // typed, so a listing in neither (7203.T) can still be added by symbol.
+  const cmpInput = $('fundCmpInput'), cmpList = $('fundCmpList');
+  let cmpItems = [], cmpActive = -1, cmpTimer = null, cmpSeq = 0;
+  function cmpClose() {
+    cmpList.hidden = true; cmpList.textContent = '';
+    cmpItems = []; cmpActive = -1;
+    cmpInput.setAttribute('aria-expanded', 'false');
+    cmpInput.removeAttribute('aria-activedescendant');
+  }
+  function cmpMark(i) {
+    cmpActive = i;
+    [...cmpList.children].forEach((li, j) => {
+      li.classList.toggle('is-active', j === i);
+      li.setAttribute('aria-selected', j === i ? 'true' : 'false');
+    });
+    if (i >= 0) cmpInput.setAttribute('aria-activedescendant', 'fundCmpOpt' + i);
+    else cmpInput.removeAttribute('aria-activedescendant');
+  }
+  function cmpPick(ticker) {
+    cmpClose();
+    if (addCompare(ticker)) cmpInput.value = '';
+  }
+  function cmpDraw(items) {
+    const taken = new Set([TICKER].concat(compare.map(c => c.ticker)));
+    items = items.filter(it => !taken.has(it.ticker));
+    if (!items.length || document.activeElement !== cmpInput) { cmpClose(); return; }
+    cmpItems = items;
+    cmpList.textContent = '';
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.id = 'fundCmpOpt' + i;
+      li.className = 'fd-cmp-opt';
+      li.setAttribute('role', 'option');
+      for (const [cls, text] of [['tk fd-mono', it.ticker], ['nm', it.name], ['ex', it.exchange]]) {
+        const span = document.createElement('span');
+        span.className = cls;
+        span.textContent = text || '';
+        li.appendChild(span);
+      }
+      // mousedown, not click: a click lands after the input's blur closed the list.
+      li.addEventListener('mousedown', e => { e.preventDefault(); cmpPick(it.ticker); });
+      cmpList.appendChild(li);
+    });
+    cmpList.hidden = false;
+    cmpInput.setAttribute('aria-expanded', 'true');
+    cmpMark(-1);
+  }
+  cmpInput.addEventListener('input', () => {
+    clearTimeout(cmpTimer);
+    const q = cmpInput.value.trim();
+    if (!q) { cmpSeq++; cmpClose(); return; }
+    cmpTimer = setTimeout(async () => {
+      const seq = ++cmpSeq;
+      try {
+        const r = await fetch('/api/companies/suggest?q=' + encodeURIComponent(q));
+        const d = r.ok ? await r.json() : null;
+        if (seq === cmpSeq) cmpDraw((d && d.results) || []);
+      } catch (_) { /* typing a symbol and pressing Enter still works */ }
+    }, 160);
+  });
+  cmpInput.addEventListener('keydown', e => {
+    const open = !cmpList.hidden && cmpItems.length;
+    if (e.key === 'ArrowDown' && open) { e.preventDefault(); cmpMark((cmpActive + 1) % cmpItems.length); }
+    else if (e.key === 'ArrowUp' && open) {
+      e.preventDefault(); cmpMark(cmpActive <= 0 ? cmpItems.length - 1 : cmpActive - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      // The highlighted suggestion; else one whose ticker is what was typed;
+      // else the first, since a name ("apple") is not itself a ticker. With
+      // no list showing, the typed symbol, which may be a foreign listing.
+      const typed = cmpInput.value.trim().toUpperCase();
+      let pick = typed;
+      if (open) {
+        const exact = cmpItems.find(it => it.ticker === typed);
+        pick = cmpActive >= 0 ? cmpItems[cmpActive].ticker : (exact || cmpItems[0]).ticker;
+      }
+      cmpPick(pick);
+    } else if (e.key === 'Escape' && open) { e.preventDefault(); cmpClose(); }
+  });
+  cmpInput.addEventListener('blur', () => { cmpSeq++; clearTimeout(cmpTimer); cmpClose(); });
+
   // The figures behind the cards, for a spreadsheet: the view and range on
   // screen, raw numbers (ratios as fractions), one row per period, oldest
   // first. Built here from the payload already loaded -- no second request.
   const CSV_COLUMNS = ['revenue', 'revenue_yoy', 'gross_profit', 'gross_margin', 'operating_income',
     'operating_margin', 'net_income', 'net_margin', 'eps', 'roe', 'ocf', 'capex', 'fcf', 'rnd', 'sbc',
     'cash', 'debt', 'equity', 'shares', 'buybacks', 'dividends', 'dps'];
+  const csvCell = v => {
+    if (v === null || v === undefined) return '';
+    const t = String(v);
+    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  function saveCsv(lines, name) {
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+  // A comparison: one row per company and period in the calendar window, with
+  // the calendar period the charts placed it in and the company's own.
+  function downloadCompareCsv() {
+    const { cos, keys } = companies();
+    const shown = new Set(keys);
+    const head = ['ticker', 'calendar_period', 'period_end', 'fiscal_period', 'currency']
+      .concat(CSV_COLUMNS, ['price', 'pe', 'ps']);
+    const lines = [head.join(',')];
+    cos.forEach(co => {
+      const val = ['price', 'pe', 'ps'].map(m => seriesOf(co.payload, co.src, m, true));
+      co.keys.forEach((k, i) => {
+        if (!shown.has(k)) return;
+        lines.push([co.ticker, k, co.src.ends[i], co.src.labels[i] || '', co.cur]
+          .concat(CSV_COLUMNS.map(m => (co.src.values[m] || [])[i]), val.map(s => s[i]))
+          .map(csvCell).join(','));
+      });
+    });
+    saveCsv(lines, `${cos.map(co => co.ticker).join('_vs_')}_fundamentals_${view}.csv`);
+  }
   function downloadCsv() {
     if (!payload || payload.unavailable) return;
+    if (readyCompare().length) { downloadCompareCsv(); return; }
     const src = source();
     const idx = F.window(src.ends, range, i => ['revenue', 'net_income'].some(
       m => typeof (src.values[m] || [])[i] === 'number'));
     const val = { valuation: true };
     const cols = CSV_COLUMNS.filter(m => idx.some(i => typeof (src.values[m] || [])[i] === 'number'));
     const extra = ['price', 'pe', 'ps'].filter(m => idx.some(i => typeof series(src, val, m)[i] === 'number'));
-    const cell = v => {
-      if (v === null || v === undefined) return '';
-      const t = String(v);
-      return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
-    };
     const head = ['period_end', 'fiscal_period'].concat(cols, extra);
     const lines = [head.join(',')];
     idx.forEach(i => {
       lines.push([src.ends[i], src.labels[i] || ''].concat(
-        cols.map(m => (src.values[m] || [])[i]), extra.map(m => series(src, val, m)[i])).map(cell).join(','));
+        cols.map(m => (src.values[m] || [])[i]), extra.map(m => series(src, val, m)[i])).map(csvCell).join(','));
     });
-    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${TICKER}_fundamentals_${view}_${(payload.basis || {}).currency || 'USD'}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    saveCsv(lines, `${TICKER}_fundamentals_${view}_${(payload.basis || {}).currency || 'USD'}.csv`);
   }
 
-  // Expose for switchTab() and the ?tab=fundamentals deep link.
+  // Expose for switchTab() and the ?tab=fundamentals deep link. ?compare=
+  // starts its companies loading alongside this one's.
   window._initFundPanel = function () {
     if (started) return;
     started = true;
     load(false);
+    const asked = new URLSearchParams(location.search).get('compare') || '';
+    asked.split(',').slice(0, COMPARE_MAX).forEach(t => addCompare(t));
   };
 
   document.addEventListener('click', e => {
@@ -6841,6 +7309,10 @@ async function explainChart(chartKey) {
     if (r) { range = r.dataset.fundRange; localStorage.setItem(STORE_RANGE, range); render(); return; }
     const x = e.target.closest('[data-fund-expand]');
     if (x) { expandChart('fund_' + x.dataset.fundExpand); return; }
+    const add = e.target.closest('[data-fund-add]');
+    if (add) { addCompare(add.dataset.fundAdd); return; }
+    const rm = e.target.closest('[data-fund-remove]');
+    if (rm) { removeCompare(rm.dataset.fundRemove); return; }
     if (e.target.closest('[data-fund-retry]')) load(true);
     if (e.target.closest('[data-fund-csv]')) downloadCsv();
   });

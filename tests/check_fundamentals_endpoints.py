@@ -413,6 +413,61 @@ class Page(unittest.TestCase):
             for metric in re.findall(r"'([a-z_]+)'", group):
                 self.assertRegex(i18n, r"'fund\.s_%s':\s*\{\s*en: '[^']+',\s*zh: '[^']+'" % metric)
 
+    # Comparing companies (asked 2026-10-06): the suggestions route, the row on
+    # the page, and its strings in both languages.
+
+    def test_suggestions_come_from_the_followed_companies_and_secs_list(self):
+        from unittest import mock
+
+        from ystocker import directory, routes
+        sec = {"rows": [
+            {"t": "AMAT", "n": "Applied Materials Inc", "x": "Nasdaq", "also": [], "cik": 1},
+            {"t": "MDLZ", "n": "Mondelez International, Inc.", "x": "Nasdaq", "also": [], "cik": 2},
+        ]}
+        followed = next(t for ts in routes.PEER_GROUPS.values() for t in ts if t.isalpha())
+        with mock.patch.object(directory, "peek", return_value=sec):
+            by_ticker = self.client.get("/api/companies/suggest?q=amat")
+            by_name = self.client.get("/api/companies/suggest?q=mondelez").get_json()
+            ours = self.client.get(f"/api/companies/suggest?q={followed}").get_json()
+            empty = self.client.get("/api/companies/suggest?q=%20").get_json()
+        self.assertEqual(by_ticker.status_code, 200)
+        self.assertIn("public", by_ticker.headers.get("Cache-Control", ""))
+        first = by_ticker.get_json()["results"][0]
+        self.assertEqual((first["ticker"], first["exchange"]), ("AMAT", "Nasdaq"))
+        self.assertEqual([r["ticker"] for r in by_name["results"]], ["MDLZ"])
+        self.assertIn(followed, [r["ticker"] for r in ours["results"]])
+        self.assertEqual(empty, {"results": []})
+
+    def test_suggestions_survive_a_cold_directory(self):
+        from unittest import mock
+
+        from ystocker import directory
+        with mock.patch.object(directory, "peek", return_value=None):
+            resp = self.client.get("/api/companies/suggest?q=zzzz")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json(), {"results": []})
+
+    def test_page_carries_the_compare_row(self):
+        html = self.client.get("/history/NVDA").get_data(as_text=True)
+        self.assertIn('id="fundCompare"', html)
+        self.assertIn('aria-controls="fundCmpList"', html)
+        self.assertIn("/api/companies/suggest?q=", html)
+        self.assertIn(".get('compare')", html)                 # ?compare= is read
+        self.assertIn("searchParams.set('compare'", html)      # and written back
+        self.assertIn("F.calendarKey", html)                   # periods line up by calendar
+
+    def test_every_compare_string_is_in_both_languages(self):
+        source = HISTORY.read_text()
+        i18n = I18N.read_text()
+        keys = set(re.findall(r"tr\('(fund\.(?:cmp_[a-z_]+|peers|note_compare))'", source))
+        keys |= {"fund.compare", "fund.compare_ph",
+                 # A margin's compare card is titled by its own key, the legend's
+                 # "Gross" being too short to stand alone.
+                 "fund.t_gross_margin", "fund.t_operating_margin", "fund.t_net_margin"}
+        self.assertGreaterEqual(len(keys), 14)
+        for key in keys:
+            self.assertRegex(i18n, r"'%s':\s*\{\s*en: '[^']+',\s*zh: '[^']+'" % re.escape(key))
+
 
 if __name__ == "__main__":
     unittest.main()
