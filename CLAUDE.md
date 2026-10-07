@@ -1875,10 +1875,18 @@ The surfaces:
   sideways at a laptop's width. The sector tables gained five (Rev Growth was
   there already). Both have header tooltips saying how EV/EBIT and EV/Sales
   are built. `node tests/check_evaluation_cashflow.mjs` pins the column parity.
-- **`/companies`** draws a row of six figures on each quoted card and offers
-  six more sorts, with a missing figure last either way.
-  `node tests/check_companies_page.mjs` reads the sort options from the template
-  now; its hand-kept list had silently refused the new ones.
+- **`/companies`** draws six figures on each quoted card and offers six more
+  sorts, with a missing figure last either way. The figures sit label over
+  value, three to a row, across the whole card. The first version put each
+  label beside its value under the name: 营业利润率 66.2% needs 87px and a
+  four-up card had 66px a cell, so on the Chinese page every card's figures ran
+  into each other and off its edge (reported 2026-10-07). Each line now clips
+  to its cell. The grid makes as many columns as fit a 280px card instead of
+  switching on the viewport, which cannot know the column (1180px on
+  trade-agents.com, 1427px on stock.li-family.us). Four columns is still the
+  most either host shows. `node tests/check_companies_page.mjs` pins those
+  rules, and reads the sort options from the template; its hand-kept list had
+  silently refused the new ones.
 - **The Fundamentals tab** gained FCF margin (per view, in xbrl.py beside the
   other margins) and EV/Sales and EV/EBIT cards. EV there is each quarter end's
   market cap plus debt less cash, with cash excluding marketable securities as

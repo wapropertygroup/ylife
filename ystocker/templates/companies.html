@@ -28,10 +28,11 @@
     border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-muted);
   }
   .co-meta { font-size: 11.5px; color: var(--t-ink-dim); margin: 2px 0 12px; }
-  .co-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
-  @media (min-width: 560px) { .co-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (min-width: 900px) { .co-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (min-width: 1200px) { .co-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  /* As many columns as fit a card 280px wide, the room its six figures need.
+     Breakpoints on the viewport could not know the column (1180px on
+     trade-agents.com, 1427px on stock.li-family.us) and let a card shrink to
+     256px. 280px keeps both hosts at four columns at most, as before. */
+  .co-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 10px; }
   /* A card and its star are siblings in a cell, not one inside the other: a
      button inside a link is invalid, and its click would also follow the link. */
   .co-cell { position: relative; display: grid; transition: transform .15s; }
@@ -69,15 +70,20 @@
   }
   .co-chg.up { color: var(--co-up); background: var(--co-up-bg); }
   .co-chg.down { color: var(--co-down); background: var(--co-down-bg); }
-  /* Six figures under the name, three to a row. */
+  /* Six figures across the card, label over value, three to a row. A label
+     beside its value took 87px in Chinese (营业利润率 66.2%) where a four-up
+     card had 66px a cell, so they ran into each other and off the card. Each
+     line now clips to its cell with an ellipsis; nothing can overflow it. */
   .co-stats {
-    grid-column: 2 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1px 8px; margin-top: 2px; font-size: 10.5px; color: var(--t-ink-dim);
+    grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 8px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--t-line);
   }
-  .co-stat { display: flex; justify-content: space-between; gap: 4px; min-width: 0; white-space: nowrap; }
-  .co-stat b { font-weight: 600; color: var(--t-ink); font-variant-numeric: tabular-nums; }
+  .co-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .co-stat > span, .co-stat > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .co-stat > span { font-size: 10.5px; line-height: 1.3; color: var(--t-ink-dim); }
+  .co-stat b { font-size: 12.5px; line-height: 1.3; font-weight: 600; color: var(--t-ink); font-variant-numeric: tabular-nums; }
   .co-stat b.neg { color: var(--co-down); }
-  .co-foot { grid-column: 2 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .co-foot { grid-column: 1 / -1; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
              padding-right: 22px; min-height: 1.4em; }
   .co-empty { font-size: 13px; color: var(--t-ink-muted); padding: 18px 0; }
   #coEmpty[hidden], #coMore[hidden] { display: none; }
@@ -337,9 +343,9 @@
   /* Growth, margins and the EV multiples, a dash where Yahoo has nothing or
      the figure would not mean anything (a loss's EV/EBIT, a bank's EV). */
   const STATS = [
-    ['rg', 'companies.stat_rg', 'Rev gr', 'pct'], ['gm', 'companies.stat_gm', 'Gross', 'pct'],
-    ['om', 'companies.stat_om', 'Op', 'pct'], ['fm', 'companies.stat_fm', 'FCF', 'pct'],
-    ['es', 'companies.stat_es', 'EV/S', 'x'], ['ee', 'companies.stat_ee', 'EV/EBIT', 'x'],
+    ['rg', 'companies.stat_rg', 'Rev growth', 'pct'], ['gm', 'companies.stat_gm', 'Gross margin', 'pct'],
+    ['om', 'companies.stat_om', 'Op margin', 'pct'], ['fm', 'companies.stat_fm', 'FCF margin', 'pct'],
+    ['es', 'companies.stat_es', 'EV/Sales', 'x'], ['ee', 'companies.stat_ee', 'EV/EBIT', 'x'],
   ];
   function stats(r) {
     return `<span class="co-stats">${STATS.map(([k, key, label, kind]) => {
@@ -347,7 +353,8 @@
       const has = typeof v === 'number' && isFinite(v);
       const text = !has ? '—' : kind === 'x' ? v.toFixed(1) + '×'
         : (k === 'rg' && v > 0 ? '+' : '') + v.toFixed(1) + '%';
-      return `<span class="co-stat"><span>${esc(tr(key, label))}</span><b class="${has && v < 0 ? 'neg' : ''}">${text}</b></span>`;
+      const name = tr(key, label);
+      return `<span class="co-stat" title="${esc(name)} ${text}"><span>${esc(name)}</span><b class="${has && v < 0 ? 'neg' : ''}">${text}</b></span>`;
     }).join('')}</span>`;
   }
 

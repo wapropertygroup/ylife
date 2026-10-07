@@ -269,6 +269,30 @@ console.log('the stats row');
   t('a figure is formatted', html.includes('<b class="">+105.9%</b>') && html.includes('<b class="">28.6×</b>'));
   t('a negative margin is marked', html.includes('<b class="neg">-4.0%</b>'));
   t('a missing multiple is a dash, not a zero', /EV\/EBIT<\/span><b class="">—<\/b>/.test(html));
+  t('a figure carries its label and value as a title, for when a line is clipped',
+    html.includes('title="Rev growth +105.9%"'));
+}
+
+console.log('a card keeps its text inside it');
+{
+  // CSS, which no rendered-HTML check sees. A label beside its value needed
+  // 87px in Chinese where a four-up card had 66px a cell, so the figures ran
+  // into each other and off the card (2026-10-07). A browser sweep from 300px
+  // to 1920px found nothing past a card once these held.
+  const css = /<style>([\s\S]*?)<\/style>/.exec(tpl)[1];
+  const rule = sel => {
+    const m = new RegExp(`(?:^|\\n)\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css);
+    return m ? m[1].replace(/\s+/g, ' ') : '';
+  };
+  const line = rule('.co-stat > span, .co-stat > b');
+  t('every stat line clips to its cell',
+    ['white-space: nowrap', 'overflow: hidden', 'text-overflow: ellipsis'].every(d => line.includes(d)), line);
+  t('a cell may shrink below its text', rule('.co-stat').includes('min-width: 0')
+    && rule('.co-stats').includes('repeat(3, minmax(0, 1fr))'));
+  t('the figures take the card\'s full width', rule('.co-stats').includes('grid-column: 1 / -1'));
+  const min = /\.co-grid\s*\{[^}]*minmax\(min\(100%,\s*(\d+)px\)/.exec(css);
+  t('no card is narrower than 280px', !!min && Number(min[1]) >= 280, min ? `${min[1]}px` : 'no minimum');
+  t('and no viewport breakpoint sets the columns over it', !/@media[^{]*\{\s*\.co-grid/.test(css));
 }
 
 console.log('gainers and losers are rankings of their own');
