@@ -490,6 +490,9 @@
   <button id="tabDcaBtn" onclick="switchTab('dca')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.dca">DCA Valuation</button>
+  <button id="tabMoneyBtn" onclick="switchTab('money')"
+          class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
+          data-i18n="history.tab_money">Smart money</button>
   <button id="tabNewsBtn" onclick="switchTab('news')"
           class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 -mb-px transition whitespace-nowrap shrink-0"
           data-i18n="history.tab_news">News</button>
@@ -1779,6 +1782,47 @@
      tab's first open, and its height follows the page inside it, which posts
      it (dca.html, embedded only). -->
 <div id="panelDca" style="display:none"></div>
+
+<!-- ── Smart money panel: this stock across 13F, Form 4 and House PTRs ──
+     (ystocker/smart_money.py, /api/smart-money/<t>), filled on the tab's
+     first open. Hand-written classes: every row is built in JS, and a Tailwind
+     class only a template literal uses can be missing from the bundle. -->
+<style>
+  .hm-head { margin: 0 0 12px; }
+  .hm-verdict { font-size: 14px; line-height: 1.6; color: var(--t-ink); padding: 10px 14px; border-radius: 12px;
+                border: 1px solid var(--t-line); background: var(--t-surface); margin: 0 0 8px; }
+  .hm-verdict b { color: var(--t-ink-strong); }
+  .hm-next { font-size: 12.5px; color: var(--t-ink-muted); margin: 0 0 12px; }
+  .hm-next b { color: var(--t-ink-strong); }
+  .hm-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 980px) { .hm-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .hm-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); }
+  .hm-card h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; font-weight: 700;
+                color: var(--t-ink-strong); text-transform: uppercase; letter-spacing: .03em; margin: 0 0 2px; }
+  .hm-card h3 .hm-when { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--t-ink-dim); }
+  .hm-sub { font-size: 11px; color: var(--t-ink-dim); margin: 0 0 8px; }
+  .hm-list { list-style: none; margin: 0; padding: 0; }
+  .hm-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--t-line); font-size: 12.5px; }
+  .hm-list li:first-child { border-top: 0; }
+  .hm-list .k { color: var(--t-ink-strong); font-weight: 600; min-width: 0; }
+  .hm-list .v { text-align: right; white-space: nowrap; }
+  .hm-list .s { grid-column: 1 / -1; font-size: 11px; color: var(--t-ink-dim); }
+  .hm-list .s a { color: var(--t-ink-dim); }
+  .hm-list .s a:hover { color: var(--t-accent-ink); }
+  .hm-empty { font-size: 12.5px; color: var(--t-ink-muted); padding: 6px 0; }
+  .hm-also { font-size: 11.5px; color: var(--t-ink-muted); margin: 8px 0 0; }
+  .hm-badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+  .hm-badge.buy { color: var(--hm-up, #047857); background: rgba(16,185,129,.12); }
+  .hm-badge.sell { color: var(--hm-down, #be123c); background: rgba(244,63,94,.12); }
+  .hm-badge.hold, .hm-badge.none { color: var(--t-ink-muted); background: var(--t-surface-alt); }
+  .hm-badge.split { color: #b45309; background: rgba(245,158,11,.14); }
+  .dark .hm-badge.buy { color: #34d399; } .dark .hm-badge.sell { color: #fb7185; } .dark .hm-badge.split { color: #fbbf24; }
+  .hm-foot { font-size: 11.5px; line-height: 1.6; color: var(--t-ink-dim); margin: 12px 0 0; }
+  .hm-foot a { color: var(--t-accent-ink); }
+</style>
+<div id="panelMoney" style="display:none">
+  <div id="moneyBody"><p class="hm-empty" data-i18n="smart.loading">Loading…</p></div>
+</div>
 
 <!-- ── Research panel (full stock-research template) ──────────────── -->
 <div id="panelResearch" style="display:none">
@@ -4684,7 +4728,7 @@ let _videosLoaded = false;
 // onto, and the block at the end of this page opens it. Other parameters
 // (?lang=, ?range=) and the hash are kept. replaceState, not pushState: Back
 // leaves the page instead of stepping back through tabs.
-const HISTORY_TABS = ['charts', 'fundamentals', 'dca', 'news', 'videos', 'research'];
+const HISTORY_TABS = ['charts', 'fundamentals', 'dca', 'money', 'news', 'videos', 'research'];
 function _writeTabToAddress(tab) {
   try {
     const u = new URL(location.href);
@@ -4703,7 +4747,9 @@ function switchTab(tab) {
   const isResearch = tab === 'research';
   const isFund     = tab === 'fundamentals';
   const isDca      = tab === 'dca';
+  const isMoney    = tab === 'money';
   document.getElementById('panelCharts').style.display   = isCharts   ? '' : 'none';
+  document.getElementById('panelMoney').style.display    = isMoney    ? '' : 'none';
   document.getElementById('panelFund').style.display     = isFund     ? '' : 'none';
   document.getElementById('panelDca').style.display      = isDca      ? '' : 'none';
   document.getElementById('panelNews').style.display     = isNews     ? '' : 'none';
@@ -4716,11 +4762,13 @@ function switchTab(tab) {
   const researchBtn = document.getElementById('tabResearchBtn');
   const fundBtn     = document.getElementById('tabFundBtn');
   const dcaBtn      = document.getElementById('tabDcaBtn');
+  const moneyBtn    = document.getElementById('tabMoneyBtn');
   const activeClass   = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-brand text-brand whitespace-nowrap shrink-0';
   const inactiveClass = 'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 whitespace-nowrap shrink-0';
   chartsBtn.className   = isCharts   ? activeClass : inactiveClass;
   fundBtn.className     = isFund     ? activeClass : inactiveClass;
   dcaBtn.className      = isDca      ? activeClass : inactiveClass;
+  moneyBtn.className    = isMoney    ? activeClass : inactiveClass;
   newsBtn.className     = isNews     ? activeClass : inactiveClass;
   videosBtn.className   = isVideos   ? activeClass : inactiveClass;
   researchBtn.className = isResearch ? activeClass : inactiveClass;
@@ -4741,7 +4789,93 @@ function switchTab(tab) {
   if (isResearch && typeof _initResearchPanel === 'function') _initResearchPanel();
   if (isFund && typeof _initFundPanel === 'function') _initFundPanel();
   if (isDca) _initDcaPanel();
+  if (isMoney) _initMoneyPanel();
 }
+
+// ── Smart money tab ───────────────────────────────────────────────────────────
+// This stock across the three disclosures /smart-money reads: the tracked
+// funds holding it among their 50 largest (named managers first), its
+// insiders' Form 4s and the House's PTRs over 90 days, whether they agree,
+// and the next earnings date as the event that tests them. Fetched on the
+// tab's first open, never with the page; composed where I18n.apply() cannot
+// reach, so it is redrawn on a language switch.
+let _moneyData = null, _moneyState = 'idle';
+function _initMoneyPanel() {
+  if (_moneyState !== 'idle') return;
+  _moneyState = 'loading';
+  fetch(`/api/smart-money/${encodeURIComponent(TICKER)}`)
+    .then(r => r.json().then(b => ({ ok: r.ok, b })))
+    .then(({ ok, b }) => { if (!ok) throw new Error(b.error || 'failed'); _moneyData = b; _moneyState = 'done'; _renderMoney(); })
+    .catch(() => { _moneyState = 'failed'; _renderMoney(); });
+}
+function _renderMoney() {
+  const box = document.getElementById('moneyBody');
+  if (!box) return;
+  const t = (k, fb) => I18n.t(k) || fb;
+  const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
+  const esc = x => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const zh = (document.documentElement.lang || '').startsWith('zh');
+  const day = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString(zh ? 'zh-CN' : 'en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }) : '—');
+  const money = v => {
+    if (typeof v !== 'number' || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    return a >= 999.5e6 ? '$' + (a / 1e9).toFixed(2) + 'B' : a >= 999.5e3 ? '$' + (a / 1e6).toFixed(1) + 'M' : a >= 999.5 ? '$' + (a / 1e3).toFixed(0) + 'K' : '$' + a.toFixed(0);
+  };
+  const SIDE = { buy: 'smart.side_buy', sell: 'smart.side_sell', mixed: 'smart.side_mixed', split: 'smart.side_split', hold: 'smart.side_hold', none: 'smart.side_none' };
+  const CH = { new: 'smart.ch_new', increased: 'smart.ch_increased', reduced: 'smart.ch_reduced', unchanged: 'smart.ch_unchanged' };
+  const OWNER = { SP: 'smart.owner_SP', DC: 'smart.owner_DC', JT: 'smart.owner_JT' };
+  const SRC = { funds: 'smart.src_funds', insiders: 'smart.src_insiders', house: 'smart.src_house' };
+  const badge = side => side ? `<span class="hm-badge ${side}">${esc(t(SIDE[side] || '', side))}</span>` : '';
+  if (_moneyState === 'failed') { box.innerHTML = `<p class="hm-empty">${esc(t('history.money_failed', 'Could not load this stock’s filings right now.'))}</p>`; return; }
+  if (!_moneyData) return;
+  const d = _moneyData;
+  // The sentence: where the sources stand, and when they last moved.
+  let v;
+  if (d.agree) {
+    v = fill(t(d.agree.side === 'buy' ? 'smart.v_agree_buy' : 'smart.v_agree_sell', '{list}'),
+      { list: d.agree.sources.map(s => t(SRC[s], s)).join(zh ? '、' : ' and ') })
+      + (d.agree.span_days ? ' ' + fill(t('smart.v_gap', 'Their latest dates are {n} days apart.'), { n: d.agree.span_days }) : '');
+  } else if (d.split) v = t('smart.v_split', 'The sources pull in opposite directions.');
+  else if (Object.keys(d.sides || {}).length) v = t('history.money_one', 'Only one of the three has moved this stock recently.');
+  else v = t('history.money_none', 'None of the tracked managers, insiders or House members has moved this stock recently.');
+  const sides = Object.entries(d.sides || {}).map(([s, side]) => `${esc(t(SRC[s], s))} ${badge(side)}`).join(' · ');
+  let html = `<p class="hm-verdict"><b>${esc(fill(t('history.money_title', 'Smart money in {t}'), { t: TICKER }))}</b> · ${esc(v)}${sides ? '<br>' + sides : ''}</p>`;
+  html += `<p class="hm-next">${d.next_earnings
+    ? fill(esc(t('history.money_next', 'Next event that tests it: {t} reports on {d} (the date Yahoo lists).')), { t: esc(TICKER), d: `<b>${esc(day(d.next_earnings))}</b>` })
+    : esc(t('history.money_next_none', 'No upcoming earnings date is listed for this stock.'))}</p>`;
+  // Funds
+  const named = d.funds.filter(f => f.person), others = d.funds.filter(f => !f.person);
+  const fundRows = named.map(f => `<li><span class="k">${esc(zh && f.person_zh ? f.person_zh : f.person)}</span>
+      <span class="v"><span class="hm-badge ${f.ch === 'reduced' ? 'sell' : f.ch === 'unchanged' ? 'hold' : 'buy'}">${esc(t(CH[f.ch] || '', f.ch || ''))}</span></span>
+      <span class="s">${esc([f.fund, f.w != null ? fill(t('smart.weight', '{w}% of the fund'), { w: f.w }) : '', f.pct != null && f.ch !== 'new' ? (f.pct > 0 ? '+' : '') + f.pct + '%' : '', fill(t('smart.q_to', 'Q to {d}'), { d: day(f.as_of) })].filter(Boolean).join(' · '))}</span></li>`).join('');
+  html += `<div class="hm-grid"><section class="hm-card"><h3><span>${esc(t('smart.src_funds', 'Fund managers'))} · 13F</span><span class="hm-when">${esc(d.sources.funds.as_of ? fill(t('smart.w_funds', 'quarter to {d}'), { d: day(d.sources.funds.as_of) }) : '')}</span></h3>
+    <p class="hm-sub">${esc(t('history.money_funds_sub', 'Named managers holding it among their 50 largest positions.'))}</p>
+    ${named.length ? `<ul class="hm-list">${fundRows}</ul>` : `<p class="hm-empty">${esc(t('history.money_funds_none', 'None of the named managers holds it among their 50 largest.'))}</p>`}
+    ${others.length ? `<p class="hm-also">${esc(fill(t('history.money_funds_also', 'Also among the 50 largest at: {list}'), { list: others.map(f => f.fund).join(', ') }))}</p>` : ''}</section>`;
+  // Insiders
+  const insRows = d.insiders.map(r => `<li><span class="k">${esc(r.o)}</span><span class="v">${badge(r.k)}</span>
+      <span class="s">${esc([r.ti, money(r.v), day(r.d), r.lag != null ? fill(t('smart.lag', 'filed {n} days later'), { n: r.lag }) : '', r.pl ? t('smart.plan', 'under a 10b5-1 plan') : '', r.of ? t('smart.offering', 'in an offering') : ''].filter(Boolean).join(' · '))}</span></li>`).join('');
+  html += `<section class="hm-card"><h3><span>${esc(t('smart.src_insiders', 'Insiders'))} · Form 4</span><span class="hm-when">${esc(fill(t('history.money_window', 'last {n} days'), { n: d.window_days }))}</span></h3>
+    <p class="hm-sub">${esc(t('history.money_ins_sub', 'Open-market buys and sells by officers, directors and 10% owners.'))}</p>
+    ${insRows ? `<ul class="hm-list">${insRows}</ul>` : `<p class="hm-empty">${esc(d.sources.insiders.followed ? t('history.money_ins_none', 'No open-market trades filed in the window.') : t('history.money_ins_unswept', 'Form 4s are swept for the followed companies only; this one is not among them.'))}</p>`}
+    <p class="hm-also"><a href="/insiders">${esc(t('history.money_ins_link', 'All insider trades →'))}</a></p></section>`;
+  // House
+  const hRows = d.house.map(r => {
+    const who = (zh && r.m_zh) || r.m;
+    const own = r.o ? t(OWNER[r.o] || '', r.o) : t('smart.owner_self', 'member');
+    const opt = r.c === 'OP' ? t(r.op === 'put' ? 'smart.opt_put' : 'smart.opt_call', 'options') : '';
+    const amount = r.lo && r.hi ? money(r.lo) + '–' + money(r.hi) : r.lo ? fill(t('smart.over', 'over {v}'), { v: money(r.lo - 1) }) : '';
+    const url = `https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/${r.yr}/${r.doc}.pdf`;
+    return `<li><span class="k">${esc(who)}</span><span class="v">${r.dir ? badge(r.dir) : `<span class="hm-badge none">${esc(t(r.k === 'sell' ? 'smart.kind_sell' : r.k === 'buy' ? 'smart.kind_buy' : 'smart.kind_other', r.k || ''))}</span>`}</span>
+      <span class="s">${esc([r.md, own, opt, amount, day(r.d), r.lag != null ? fill(t('smart.lag', 'filed {n} days later'), { n: r.lag }) : ''].filter(Boolean).join(' · '))} · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">PTR ↗</a></span></li>`;
+  }).join('');
+  html += `<section class="hm-card"><h3><span>${esc(t('smart.src_house', 'House members'))} · PTR</span><span class="hm-when">${esc(fill(t('history.money_window', 'last {n} days'), { n: d.window_days }))}</span></h3>
+    <p class="hm-sub">${esc(t('history.money_house_sub', 'Trades by members, their spouses and children; amounts are ranges.'))}</p>
+    ${hRows ? `<ul class="hm-list">${hRows}</ul>` : `<p class="hm-empty">${esc(d.sources.house.ready ? t('history.money_house_none', 'No member reported a trade in it in the window.') : t('smart.note_house_warming', 'House reports: still being read for the first time.'))}</p>`}</section></div>`;
+  html += `<p class="hm-foot">${esc(t('history.money_foot', 'From the filings, not live positions: a 13F is filed up to 45 days after its quarter, a House report up to 45 days after the trade. Not a signal to copy.'))} <a href="/smart-money?view=stocks&sel=${encodeURIComponent(TICKER)}">${esc(t('history.money_all', 'Every stock on Smart money →'))}</a></p>`;
+  box.innerHTML = html;
+}
+document.addEventListener('i18n:langchange', () => { if (_moneyState === 'done' || _moneyState === 'failed') _renderMoney(); });
 
 // ── DCA tab ───────────────────────────────────────────────────────────────────
 // The /dca page framed (?embed=1), created on the tab's first open, in the

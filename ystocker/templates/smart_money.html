@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Smart money{% endblock %}
+{% block title_key %}smart.page_title{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written, as on /insiders and /sectors: every row and the panel are
+     built in JS, and a Tailwind class that only appears in a template literal
+     can be missing from the compiled bundle. */
+  :root { --mo-up: #047857; --mo-down: #be123c; --mo-up-bg: rgba(16,185,129,.12); --mo-down-bg: rgba(244,63,94,.12);
+          --mo-mix: #b45309; --mo-mix-bg: rgba(245,158,11,.14); }
+  .dark { --mo-up: #34d399; --mo-down: #fb7185; --mo-up-bg: rgba(52,211,153,.14); --mo-down-bg: rgba(251,113,133,.14);
+          --mo-mix: #fbbf24; }
+  .mo-h1 { font-size: 22px; font-weight: 700; color: var(--t-ink-strong); margin: 0 0 4px; }
+  .mo-lede { font-size: 13px; line-height: 1.55; color: var(--t-ink-muted); margin: 0 0 10px; max-width: 62rem; }
+  .mo-warn { font-size: 12px; line-height: 1.55; color: var(--t-ink); padding: 8px 12px; border-radius: 10px; margin: 0 0 12px;
+             border: 1px solid var(--t-line); background: var(--t-surface); }
+  .mo-warn b { color: var(--t-ink-strong); }
+  .mo-summary { font-size: 14px; line-height: 1.6; color: var(--t-ink); margin: 0 0 12px; }
+  .mo-summary b { color: var(--t-ink-strong); }
+  .mo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+  .mo-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mo-chip { font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 999px; cursor: pointer; line-height: 1.3;
+             border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted); white-space: nowrap; }
+  .mo-chip:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .mo-chip.is-on { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
+  .mo-chip .mo-cnt { opacity: .75; margin-left: 3px; font-variant-numeric: tabular-nums; }
+  .mo-search { flex: 1 1 14rem; min-width: 0; padding: 7px 12px; border-radius: 999px; font-size: 13px;
+               border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong); }
+  .mo-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+
+  .mo-main { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1000px) { .mo-main { grid-template-columns: minmax(0, 1fr) minmax(0, 360px); } }
+  .mo-card { min-width: 0; border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); }
+  .mo-list { overflow: hidden; }
+  .mo-rows { max-height: 720px; overflow-y: auto; }
+  .mo-detail { padding: 14px; align-self: start; }
+  @media (min-width: 1000px) { .mo-detail { position: sticky; top: calc(var(--w-head-h, 64px) + 12px); max-height: calc(100vh - 100px); overflow-y: auto; } }
+
+  /* By stock */
+  .mo-thead, .mo-trow { display: grid; align-items: center; gap: 2px 10px; padding: 8px 12px;
+                        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) 5.5rem 5.5rem 5.5rem 5rem; }
+  .mo-thead { font-size: 10.5px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase; letter-spacing: .03em;
+              border-bottom: 1px solid var(--t-line); position: sticky; top: 0; background: var(--t-surface); z-index: 1; }
+  .mo-trow { border-top: 1px solid var(--t-line); cursor: pointer; }
+  .mo-trow:first-child { border-top: 0; }
+  .mo-trow:hover { background: var(--t-surface-alt); }
+  .mo-trow.is-sel { background: rgba(99,102,241,.10); }
+  .mo-co { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .mo-tile { flex: none; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+             font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: -.03em; }
+  .mo-tk { font-weight: 700; font-size: 13px; color: var(--t-ink-strong); }
+  .mo-nm { display: block; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mo-agree { font-size: 12px; color: var(--t-ink); min-width: 0; }
+  .mo-agree .mo-badge { margin-right: 4px; }
+  .mo-gap { font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; }
+  .mo-badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; white-space: nowrap; }
+  .mo-badge.buy { color: var(--mo-up); background: var(--mo-up-bg); }
+  .mo-badge.sell { color: var(--mo-down); background: var(--mo-down-bg); }
+  .mo-badge.mixed, .mo-badge.split { color: var(--mo-mix); background: var(--mo-mix-bg); }
+  .mo-badge.hold, .mo-badge.none { color: var(--t-ink-muted); background: var(--t-surface-alt); }
+  .mo-src { font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mo-src .up { color: var(--mo-up); } .mo-src .down { color: var(--mo-down); } .mo-src .dim { color: var(--t-ink-dim); }
+  .mo-date { font-size: 11.5px; color: var(--t-ink-muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  @media (max-width: 720px) {
+    .mo-thead { display: none; }
+    .mo-trow { grid-template-columns: minmax(0, 1fr) auto; }
+    .mo-trow .mo-agree { grid-column: 1 / -1; }
+    .mo-trow .mo-src { display: none; }
+  }
+
+  /* By person */
+  .mo-section-h { font-size: 11px; font-weight: 700; color: var(--t-ink-dim); text-transform: uppercase; letter-spacing: .04em;
+                  padding: 10px 12px 6px; border-top: 1px solid var(--t-line); background: var(--t-surface-alt); }
+  .mo-section-h:first-child { border-top: 0; }
+  .mo-prow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 12px;
+             border-top: 1px solid var(--t-line); cursor: pointer; align-items: center; }
+  .mo-prow:hover { background: var(--t-surface-alt); }
+  .mo-prow.is-sel { background: rgba(99,102,241,.10); }
+  .mo-pname { font-size: 13px; font-weight: 600; color: var(--t-ink-strong); min-width: 0; }
+  .mo-porg { display: block; font-size: 11px; font-weight: 400; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mo-pstat { font-size: 11.5px; color: var(--t-ink-muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mo-pstat .up { color: var(--mo-up); } .mo-pstat .down { color: var(--mo-down); }
+  .mo-err { font-size: 11px; color: var(--mo-mix); }
+
+  /* Panel */
+  .mo-d-kicker { font-size: 11px; color: var(--t-ink-dim); margin: 0 0 2px; }
+  .mo-d-title { font-size: 17px; font-weight: 700; color: var(--t-ink-strong); margin: 0 0 2px; line-height: 1.3; }
+  .mo-d-title a { color: inherit; text-decoration: none; }
+  .mo-d-title a:hover { color: var(--t-accent-ink); }
+  .mo-d-sub { font-size: 12px; color: var(--t-ink-muted); margin: 0 0 10px; }
+  .mo-d-verdict { font-size: 12.5px; line-height: 1.5; color: var(--t-ink); padding: 8px 10px; border-radius: 9px; margin: 0 0 12px; border: 1px solid var(--t-line); }
+  .mo-h3 { font-size: 11.5px; font-weight: 700; color: var(--t-ink-strong); margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .03em;
+           display: flex; justify-content: space-between; gap: 8px; }
+  .mo-h3 .mo-when { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--t-ink-dim); font-size: 11px; }
+  .mo-items { list-style: none; margin: 0; padding: 0; }
+  .mo-items li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--t-line); font-size: 12px; }
+  .mo-items li:first-child { border-top: 0; }
+  .mo-items .k { color: var(--t-ink-strong); font-weight: 600; min-width: 0; }
+  .mo-items .k a { color: inherit; text-decoration: none; }
+  .mo-items .k a:hover { color: var(--t-accent-ink); text-decoration: underline; }
+  .mo-items .s { grid-column: 1 / -1; font-size: 11px; color: var(--t-ink-dim); }
+  .mo-items .v { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mo-empty { font-size: 12.5px; color: var(--t-ink-muted); padding: 12px; }
+  .mo-link { display: inline-block; margin-top: 12px; font-size: 12.5px; color: var(--t-accent-ink); text-decoration: none; }
+  .mo-link:hover { text-decoration: underline; }
+  .mo-more { font-size: 12px; color: var(--t-accent-ink); background: none; border: 0; padding: 10px 12px; cursor: pointer; }
+  .mo-note { font-size: 11.5px; line-height: 1.6; color: var(--t-ink-dim); margin: 14px 0 0; }
+  .mo-note p + p { margin-top: 3px; }
+  .mo-infer { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
+  .mo-infer div { font-size: 12px; line-height: 1.55; color: var(--t-ink); padding: 8px 10px; border: 1px solid var(--t-line); border-radius: 10px; background: var(--t-surface); }
+  .mo-infer b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--t-ink-dim); margin-bottom: 2px; }
+</style>
+
+<h1 class="mo-h1" data-i18n="smart.title">Smart money</h1>
+<p class="mo-lede" data-i18n="smart.lede">What fund managers, company insiders and members of the House have been buying and selling, from their own filings: read by stock, to see where they agree, or by person.</p>
+<p class="mo-warn" data-i18n-html="smart.warn"><b>Disclosure is not a live position.</b> A 13F is a quarter-end snapshot filed up to 45 days later; a House report gives each trade as a range, up to 45 days after it; an insider files within two business days. Every figure here carries its date. None of it is a signal to copy.</p>
+
+<p id="moSummary" class="mo-summary" aria-live="polite" data-i18n="smart.loading">Loading…</p>
+
+<div class="mo-controls">
+  <div class="mo-group" role="group" aria-label="View">
+    <button type="button" class="mo-chip" data-mo-view="stocks" data-i18n="smart.view_stocks">By stock</button>
+    <button type="button" class="mo-chip" data-mo-view="people" data-i18n="smart.view_people">By person</button>
+  </div>
+  <div class="mo-group" role="group" aria-label="Sources">
+    <button type="button" class="mo-chip" data-mo-src="funds" data-i18n="smart.src_funds">Fund managers</button>
+    <button type="button" class="mo-chip" data-mo-src="insiders" data-i18n="smart.src_insiders">Insiders</button>
+    <button type="button" class="mo-chip" data-mo-src="house" data-i18n="smart.src_house">House members</button>
+  </div>
+  <div class="mo-group" role="group" aria-label="Side" id="moSides">
+    <button type="button" class="mo-chip" data-mo-side="all" data-i18n="smart.side_all">All</button>
+    <button type="button" class="mo-chip" data-mo-side="agree" data-i18n="smart.side_agree">Agree</button>
+    <button type="button" class="mo-chip" data-mo-side="buy" data-i18n="smart.side_buy">Buying</button>
+    <button type="button" class="mo-chip" data-mo-side="sell" data-i18n="smart.side_sell">Selling</button>
+  </div>
+  <input id="moSearch" class="mo-search" type="search" autocomplete="off" spellcheck="false"
+         placeholder="Filter by stock or name" data-i18n-placeholder="smart.search_ph">
+</div>
+
+<div class="mo-main">
+  <section class="mo-card mo-list"><div id="moHead"></div><div id="moRows" class="mo-rows"></div><button type="button" id="moMore" class="mo-more" hidden></button></section>
+  <aside id="moDetail" class="mo-card mo-detail" aria-live="polite"></aside>
+</div>
+
+<div class="mo-infer">
+  <div><b data-i18n="smart.can_title">What you can read here</b><span data-i18n="smart.can_body">Who filed which trade or position, its direction, its date, and for a House trade its owner (member, spouse, child, joint) and amount range.</span></div>
+  <div><b data-i18n="smart.cannot_title">What you cannot</b><span data-i18n="smart.cannot_body">What anyone holds now, an exact amount for a House trade, trades nobody had to report, a fund selling out of a position below its 50 largest, or why a trade was made.</span></div>
+</div>
+<div id="moNote" class="mo-note"></div>
+
+<script>
+// The figures come from /api/smart-money (ystocker/smart_money.py), which
+// reads three caches -- 13F (sec13f.py), Form 4 (insiders.py), House PTRs
+// (congress.py) -- and fetches none of them. Everything here is composed
+// where I18n.apply() cannot reach, so it re-renders on a language switch.
+(function () {
+  const F = id => document.getElementById(id);
+  const tr = (key, fallback) => (typeof I18n !== 'undefined' && I18n.t(key)) || fallback;
+  const fill = (s, vals) => s.replace(/\{(\w+)\}/g, (m, k) => (k in vals ? vals[k] : m));
+  const zh = () => (document.documentElement.lang || '').indexOf('zh') === 0;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pick = (v, ok, dflt) => (ok.indexOf(v) >= 0 ? v : dflt);
+  const POLLS = 20, POLL_MS = 5000, PAGE = 120;
+  const SRC = ['funds', 'insiders', 'house'];
+  const SRC_KEY = { funds: 'smart.src_funds', insiders: 'smart.src_insiders', house: 'smart.src_house' };
+  const SRC_SHORT = { funds: 'smart.short_funds', insiders: 'smart.short_insiders', house: 'smart.short_house' };
+  const CH_KEY = { new: 'smart.ch_new', increased: 'smart.ch_increased', reduced: 'smart.ch_reduced', unchanged: 'smart.ch_unchanged' };
+  const OWNER_KEY = { SP: 'smart.owner_SP', DC: 'smart.owner_DC', JT: 'smart.owner_JT' };
+  const SIDE_KEY = { buy: 'smart.side_buy', sell: 'smart.side_sell', mixed: 'smart.side_mixed', split: 'smart.side_split',
+                     hold: 'smart.side_hold', none: 'smart.side_none' };
+  const KIND_KEY = { buy: 'smart.kind_buy', sell: 'smart.kind_sell', exchange: 'smart.kind_exchange', other: 'smart.kind_other' };
+  const HUES = [[99, 102, 241], [56, 189, 248], [52, 211, 153], [251, 191, 36], [244, 114, 182], [167, 139, 250], [45, 212, 191], [251, 146, 60]];
+
+  const params = new URLSearchParams(location.search);
+  const state = {
+    view: pick(params.get('view'), ['stocks', 'people'], 'stocks'),
+    side: pick(params.get('side'), ['all', 'agree', 'buy', 'sell'], 'all'),
+    src: new Set((params.get('src') || SRC.join(',')).split(',').filter(s => SRC.indexOf(s) >= 0)),
+    sel: params.get('sel') || '',
+    shown: PAGE,
+  };
+  if (!state.src.size) SRC.forEach(s => state.src.add(s));
+  let data = null, polls = 0, failed = false, timer = null;
+
+  const fmtDay = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
+    { timeZone: 'UTC', month: 'short', day: 'numeric' }) : '—');
+  const fmtYDay = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
+    { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }) : '—');
+  function money(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return '—';
+    const a = Math.abs(v), s = v < 0 ? '−' : '';
+    if (a >= 999.5e6) return s + '$' + (a / 1e9).toFixed(a >= 9.995e9 ? 1 : 2) + 'B';
+    if (a >= 999.5e3) return s + '$' + (a / 1e6).toFixed(a >= 99.95e6 ? 0 : 1) + 'M';
+    if (a >= 999.5) return s + '$' + (a / 1e3).toFixed(0) + 'K';
+    return s + '$' + a.toFixed(0);
+  }
+  const range = (lo, hi) => (lo && hi ? money(lo) + '–' + money(hi) : lo ? fill(tr('smart.over', 'over {v}'), { v: money(lo - 1) }) : '—');
+  function tile(t) {
+    let h = 0;
+    for (const c of t) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const [r, g, b] = HUES[h % HUES.length];
+    return `<span class="mo-tile" style="background: rgba(${r},${g},${b},.16); color: rgb(${r},${g},${b})">${esc(t.replace(/[-.].*$/, '').slice(0, 4))}</span>`;
+  }
+  const sideBadge = side => (side ? `<span class="mo-badge ${side}">${esc(tr(SIDE_KEY[side] || '', side))}</span>` : '');
+  const personName = p => (zh() && p.name_zh) || p.name;
+  const historyUrl = t => '/history/' + encodeURIComponent(t) + '?tab=money';
+
+  // ── by stock ────────────────────────────────────────────────────────────
+  function stockRows() {
+    const q = F('moSearch').value.trim().toLowerCase();
+    const names = data.names || {};
+    return (data.tickers || []).filter(r => {
+      const live = SRC.filter(s => state.src.has(s) && r.src[s]);
+      if (!live.length) return false;
+      if (state.side === 'agree' && !(r.agree && r.agree.sources.every(s => state.src.has(s)))) return false;
+      if (state.side === 'buy' && !live.some(s => r.src[s].side === 'buy')) return false;
+      if (state.side === 'sell' && !live.some(s => r.src[s].side === 'sell')) return false;
+      if (!q) return true;
+      if (r.t.toLowerCase().startsWith(q) || String(names[r.t] || r.n || '').toLowerCase().includes(q)) return true;
+      return live.some(s => r.src[s].who.some(w => String(w.name || '').toLowerCase().includes(q)));
+    });
+  }
+  function agreeText(r) {
+    if (r.agree) {
+      const n = r.agree.sources.length;
+      const gap = r.agree.span_days != null && r.agree.span_days > 0
+        ? fill(tr('smart.gap', '{n} days apart'), { n: r.agree.span_days }) : '';
+      return `${sideBadge(r.agree.side)}<span>${esc(fill(tr(r.agree.side === 'buy' ? 'smart.agree_buy' : 'smart.agree_sell', '{n} sources'), { n }))}</span>`
+        + (gap ? ` <span class="mo-gap" title="${esc(tr('smart.gap_title', 'Between the latest dates of the sources that agree. A 13F is dated to its quarter end.'))}">↔ ${esc(gap)}</span>` : '');
+    }
+    if (r.split) return `${sideBadge('split')}<span>${esc(tr('smart.split', 'pulling both ways'))}</span>`;
+    return `<span class="mo-gap">${esc(tr('smart.one_source', 'one source'))}</span>`;
+  }
+  function srcCell(r, s) {
+    const x = r.src[s];
+    if (!state.src.has(s)) return '<span class="mo-src"></span>';
+    if (!x) return '<span class="mo-src dim">·</span>';
+    const parts = [];
+    if (x.buy) parts.push(`<span class="up">↑${x.buy}</span>`);
+    if (x.sell) parts.push(`<span class="down">↓${x.sell}</span>`);
+    if (!parts.length && x.hold) parts.push(`<span class="dim">${esc(fill(tr('smart.holds', '{n} hold'), { n: x.hold }))}</span>`);
+    if (!parts.length && x.plan) parts.push(`<span class="dim">${esc(fill(tr('smart.plan_only', '{n} plan'), { n: x.plan }))}</span>`);
+    const who = x.who.map(w => w.name).filter(Boolean).slice(0, 5).join(', ');
+    return `<span class="mo-src" title="${esc(who)}">${parts.join(' ') || '·'}</span>`;
+  }
+  function renderStocks() {
+    const rows = stockRows();
+    F('moHead').innerHTML = `<div class="mo-thead"><span>${esc(tr('smart.col_stock', 'Stock'))}</span><span>${esc(tr('smart.col_agree', 'Same way?'))}</span>`
+      + SRC.map(s => `<span style="text-align:center">${esc(tr(SRC_SHORT[s], s))}</span>`).join('')
+      + `<span style="text-align:right">${esc(tr('smart.col_latest', 'Latest'))}</span></div>`;
+    if (!rows.length) { F('moRows').innerHTML = `<p class="mo-empty">${esc(tr('smart.none', 'Nothing matches.'))}</p>`; F('moMore').hidden = true; return rows; }
+    const names = data.names || {};
+    F('moRows').innerHTML = rows.slice(0, state.shown).map(r => `<div class="mo-trow${r.t === state.sel ? ' is-sel' : ''}" data-mo-t="${esc(r.t)}">
+        <span class="mo-co">${tile(r.t)}<span style="min-width:0"><span class="mo-tk">${esc(r.t)}</span><span class="mo-nm">${esc(names[r.t] || r.n || '')}</span></span></span>
+        <span class="mo-agree">${agreeText(r)}</span>${SRC.map(s => srcCell(r, s)).join('')}
+        <span class="mo-date">${esc(fmtDay(r.latest))}</span></div>`).join('');
+    const left = rows.length - Math.min(state.shown, rows.length);
+    F('moMore').hidden = left <= 0;
+    F('moMore').textContent = fill(tr('smart.more', 'Show more ({n} left)'), { n: left });
+    return rows;
+  }
+
+  // ── by person ───────────────────────────────────────────────────────────
+  function peopleRows() {
+    const q = F('moSearch').value.trim().toLowerCase();
+    const kindSrc = { fund: 'funds', insider: 'insiders', house: 'house' };
+    return (data.people || []).filter(p => {
+      if (!state.src.has(kindSrc[p.kind])) return false;
+      if (state.side === 'buy' && !p.buys) return false;
+      if (state.side === 'sell' && !p.sells) return false;
+      if (!q) return true;
+      return [p.name, p.name_zh, p.org, p.ticker].some(s => String(s || '').toLowerCase().includes(q))
+        || (p.actions || []).some(a => String(a.t || '').toLowerCase().startsWith(q));
+    });
+  }
+  function personStat(p) {
+    if (p.error) return `<span class="mo-err">${esc(tr('smart.no_data', 'no 13F data'))}</span>`;
+    const bits = [];
+    if (p.buys) bits.push(`<span class="up">↑${p.buys}</span>`);
+    if (p.sells) bits.push(`<span class="down">↓${p.sells}</span>`);
+    const when = p.kind === 'fund' ? fill(tr('smart.q_to', 'Q to {d}'), { d: fmtDay(p.as_of) })
+      : fmtDay(p.kind === 'house' ? p.filed : p.latest);
+    return bits.join(' ') + (bits.length ? ' · ' : '') + esc(when);
+  }
+  function personOrg(p) {
+    if (p.kind === 'fund') return fill(tr(p.role === 'founded' ? 'smart.founded' : 'smart.runs', '{org}'), { org: p.org });
+    if (p.kind === 'house') return fill(tr('smart.house_member', 'House · {d}'), { d: p.org || '' });
+    return [p.title, p.org].filter(Boolean).join(' · ');
+  }
+  function renderPeople() {
+    const rows = peopleRows();
+    F('moHead').innerHTML = '';
+    if (!rows.length) { F('moRows').innerHTML = `<p class="mo-empty">${esc(tr('smart.none', 'Nothing matches.'))}</p>`; F('moMore').hidden = true; return rows; }
+    const groups = [['fund', 'smart.sec_funds'], ['house', 'smart.sec_house'], ['insider', 'smart.sec_insiders']];
+    let html = '';
+    groups.forEach(([kind, key]) => {
+      const mine = rows.filter(p => p.kind === kind);
+      if (!mine.length) return;
+      html += `<div class="mo-section-h">${esc(tr(key, kind))} · ${mine.length}</div>`;
+      html += mine.map(p => `<div class="mo-prow${p.id === state.sel ? ' is-sel' : ''}" data-mo-p="${esc(p.id)}">
+          <span class="mo-pname">${esc(personName(p))}<span class="mo-porg">${esc(personOrg(p))}</span></span>
+          <span class="mo-pstat">${personStat(p)}</span></div>`).join('');
+    });
+    F('moRows').innerHTML = html;
+    F('moMore').hidden = true;
+    return rows;
+  }
+
+  // ── the panel ───────────────────────────────────────────────────────────
+  function lagText(n) { return n == null ? '' : fill(tr('smart.lag', '{n} days later'), { n }); }
+  function stockPanel(r) {
+    const names = data.names || {};
+    const v = r.agree
+      ? fill(tr(r.agree.side === 'buy' ? 'smart.v_agree_buy' : 'smart.v_agree_sell', '{list} are on the same side.'),
+          { list: r.agree.sources.map(s => tr(SRC_KEY[s], s)).join(zh() ? '、' : ' and ') })
+        + (r.agree.span_days ? ' ' + fill(tr('smart.v_gap', 'Their latest dates are {n} days apart.'), { n: r.agree.span_days }) : '')
+      : r.split ? tr('smart.v_split', 'The sources pull in opposite directions.')
+      : tr('smart.v_one', 'Only one source moved this stock.');
+    let html = `<p class="mo-d-kicker">${esc(tr('smart.k_stock', 'Stock'))}</p>
+      <h2 class="mo-d-title"><a href="${historyUrl(r.t)}">${esc(r.t)}</a></h2>
+      <p class="mo-d-sub">${esc(names[r.t] || r.n || '')}</p>
+      <p class="mo-d-verdict">${esc(v)}</p>`;
+    SRC.forEach(s => {
+      const x = r.src[s];
+      if (!x) return;
+      const when = s === 'funds' ? fill(tr('smart.w_funds', 'quarter to {d}'), { d: fmtYDay(x.date) })
+        : fill(tr('smart.w_trades', 'latest trade {d}'), { d: fmtYDay(x.date) });
+      html += `<h3 class="mo-h3"><span>${esc(tr(SRC_KEY[s], s))} ${sideBadge(x.side)}</span><span class="mo-when">${esc(when)}</span></h3><ul class="mo-items">`;
+      html += x.who.map(w => {
+        const k = esc((zh() && w.name_zh) || w.name || '');
+        let val = '';
+        if (s === 'funds') val = `<span class="mo-badge ${w.ch === 'reduced' ? 'sell' : 'buy'}">${esc(tr(CH_KEY[w.ch] || '', w.ch || ''))}</span>`;
+        else val = `<span class="mo-badge ${w.dir}">${esc(tr(SIDE_KEY[w.dir] || '', w.dir))}</span>`;
+        const sub = s === 'funds' ? [w.org, w.w != null ? fill(tr('smart.weight', '{w}% of the fund'), { w: w.w }) : ''].filter(Boolean).join(' · ')
+          : s === 'insiders' ? [w.title, w.plan ? tr('smart.plan', 'under a 10b5-1 plan') : ''].filter(Boolean).join(' · ')
+          : w.org || '';
+        return `<li><span class="k">${k}</span><span class="v">${val}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</li>`;
+      }).join('') + '</ul>';
+      if (s === 'insiders' && x.plan) html += `<p class="mo-note" style="margin:4px 0 0">${esc(fill(tr('smart.plan_note', '{n} trades under a 10b5-1 plan are listed but do not set the side.'), { n: x.plan }))}</p>`;
+    });
+    html += `<a class="mo-link" href="${historyUrl(r.t)}">${esc(fill(tr('smart.open_dossier', '{t}’s full dossier →'), { t: r.t }))}</a>`;
+    return html;
+  }
+  function personPanel(p) {
+    let html = `<p class="mo-d-kicker">${esc(tr({ fund: 'smart.k_fund', house: 'smart.k_house', insider: 'smart.k_insider' }[p.kind], p.kind))}</p>
+      <h2 class="mo-d-title">${esc(personName(p))}</h2><p class="mo-d-sub">${esc(personOrg(p))}</p>`;
+    if (p.kind === 'fund') {
+      if (p.error) return html + `<p class="mo-empty">${esc(tr('smart.fund_error', 'This fund’s 13F could not be read on the last refresh.'))}</p>`;
+      html += `<p class="mo-d-verdict">${esc(fill(tr('smart.fund_line', '13F for the quarter to {q}, filed {f} ({lag} days after). {n} positions, ${v}; opened {o}, added {a}, trimmed {r} among its 50 largest.'),
+        { q: fmtYDay(p.as_of), f: fmtYDay(p.filed), lag: p.lag == null ? '—' : p.lag, n: p.positions || '—',
+          v: p.value_m != null ? money(p.value_m * 1e6).replace('$', '') : '—', o: p.opened.length, a: p.buys - p.opened.length, r: p.sells }))}</p>`;
+      html += `<ul class="mo-items">` + p.actions.map(a => `<li><span class="k">${a.t ? `<a href="${historyUrl(a.t)}">${esc(a.t)}</a>` : esc(a.n || '')}</span>
+        <span class="v"><span class="mo-badge ${a.dir === 'sell' ? 'sell' : a.dir === 'buy' ? 'buy' : 'hold'}">${esc(tr(CH_KEY[a.ch] || '', a.ch || ''))}</span></span>
+        <span class="s">${esc([a.t ? a.n : '', a.w != null ? fill(tr('smart.weight', '{w}% of the fund'), { w: a.w }) : '', a.pct != null && a.ch !== 'new' ? (a.pct > 0 ? '+' : '') + a.pct + '%' : ''].filter(Boolean).join(' · '))}</span></li>`).join('') + '</ul>';
+    } else if (p.kind === 'house') {
+      html += `<p class="mo-d-verdict">${esc(fill(tr('smart.house_line', '{n} trades filed in the last {d} days, about {m} at the ranges’ midpoints. Latest filed {f}.'),
+        { n: p.trades, d: data.window_days, m: money(p.mid), f: fmtYDay(p.filed) }))}</p>`;
+      html += `<ul class="mo-items">` + p.actions.map(a => {
+        const own = a.o ? tr(OWNER_KEY[a.o] || '', a.o) : tr('smart.owner_self', 'member');
+        const label = a.t ? `<a href="${historyUrl(a.t)}">${esc(a.t)}</a>` : esc(a.n || '');
+        const side = a.dir ? `<span class="mo-badge ${a.dir}">${esc(tr(SIDE_KEY[a.dir] || '', a.dir))}</span>`
+          : `<span class="mo-badge none">${esc(tr(KIND_KEY[a.k] || KIND_KEY.other, a.k || ''))}</span>`;
+        const opt = a.c === 'OP' ? ' · ' + tr(a.op === 'put' ? 'smart.opt_put' : 'smart.opt_call', 'options') : '';
+        const url = `https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/${a.yr}/${a.doc}.pdf`;
+        return `<li><span class="k">${label}</span><span class="v">${side}</span>
+          <span class="s">${esc(range(a.lo, a.hi))} · ${esc(own)}${esc(opt)} · ${esc(fmtYDay(a.d))} · ${esc(lagText(a.lag))} · <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">PTR ↗</a></span></li>`;
+      }).join('') + '</ul>';
+    } else {
+      html += `<p class="mo-d-verdict">${esc(fill(tr('smart.insider_line', '{b} buys and {s} sells filed in the last {d} days, {v} in all.'),
+        { b: p.buys, s: p.sells, d: data.window_days, v: money(p.value) }))}</p>`;
+      html += `<ul class="mo-items">` + p.actions.map(a => `<li><span class="k"><a href="${historyUrl(a.t)}">${esc(a.t)}</a></span>
+        <span class="v"><span class="mo-badge ${a.dir}">${esc(tr(SIDE_KEY[a.dir] || '', a.dir))}</span></span>
+        <span class="s">${esc([money(a.v), fmtYDay(a.d), lagText(a.lag), a.plan ? tr('smart.plan', 'under a 10b5-1 plan') : '', a.offering ? tr('smart.offering', 'in an offering') : ''].filter(Boolean).join(' · '))}</span></li>`).join('') + '</ul>';
+    }
+    return html;
+  }
+  function renderDetail(rows) {
+    const box = F('moDetail');
+    let item = null;
+    if (state.view === 'stocks') item = (data.tickers || []).find(r => r.t === state.sel) || rows[0];
+    else item = (data.people || []).find(p => p.id === state.sel) || rows[0];
+    if (!item) { box.innerHTML = `<p class="mo-empty">${esc(tr('smart.pick', 'Pick a row to see who did what.'))}</p>`; return; }
+    state.sel = state.view === 'stocks' ? item.t : item.id;
+    box.innerHTML = state.view === 'stocks' ? stockPanel(item) : personPanel(item);
+    document.querySelectorAll('[data-mo-t], [data-mo-p]').forEach(el =>
+      el.classList.toggle('is-sel', (el.dataset.moT || el.dataset.moP) === state.sel));
+  }
+
+  // ── the summary and the note ────────────────────────────────────────────
+  function renderSummary() {
+    const t = data.tickers || [];
+    const agreeBuy = t.filter(r => r.agree && r.agree.side === 'buy').length;
+    const agreeSell = t.filter(r => r.agree && r.agree.side === 'sell').length;
+    const people = data.people || [];
+    const funds = people.filter(p => p.kind === 'fund' && !p.error).length;
+    const house = people.filter(p => p.kind === 'house').length;
+    const ins = people.filter(p => p.kind === 'insider').length;
+    F('moSummary').innerHTML = esc(fill(tr('smart.summary', '{funds} fund managers, {house} House members and {ins} insiders moved {n} stocks; on {ab} the sources that moved agree on buying, on {as} on selling.'),
+      { funds, house, ins, n: t.length, ab: agreeBuy, as: agreeSell })).replace(/^(\S+)/, '<b>$1</b>');
+  }
+  function renderNote() {
+    const s = data.sources || {};
+    const lines = [];
+    if (s.funds) lines.push(fill(tr('smart.note_funds', '13F: {n} of {m} named managers’ latest quarters, to {q}, filed by {f}. Only each fund’s 50 largest positions are read, so an exit is not visible.'),
+      { n: s.funds.with_data, m: s.funds.named, q: fmtYDay(s.funds.as_of), f: fmtYDay(s.funds.filed) }));
+    if (s.insiders) lines.push(fill(tr('smart.note_insiders', 'Form 4: open-market trades filed in the last {d} days at the {c} of {u} followed companies checked so far. A trade under a 10b5-1 plan, or a purchase in an offering, does not set the side.'),
+      { d: data.window_days, c: s.insiders.checked || 0, u: s.insiders.universe || 0 }));
+    if (s.house) lines.push(s.house.filings == null
+      ? tr('smart.note_house_warming', 'House reports: still being read for the first time; members will appear as they are.')
+      : fill(tr('smart.note_house', 'House PTRs: {n} reports filed in the last year ({p} on paper, linked but not read; {q} still to read), latest filed {f}. Stock and options only; a sale of options sets no side.'),
+        { n: s.house.filings, p: s.house.paper || 0, q: s.house.pending || 0, f: fmtYDay(s.house.latest_filed) }));
+    lines.push(fill(tr('smart.note_agree', 'Same way: two or more sources on one side and none on the other, over the last {d} days for Form 4s and PTRs and the latest quarter for 13Fs.'), { d: data.window_days }));
+    F('moNote').innerHTML = lines.map(x => `<p>${esc(x)}</p>`).join('');
+  }
+
+  // ── wiring ──────────────────────────────────────────────────────────────
+  function syncUrl() {
+    const u = new URL(location.href);
+    u.searchParams.set('view', state.view);
+    state.side !== 'all' ? u.searchParams.set('side', state.side) : u.searchParams.delete('side');
+    state.src.size < SRC.length ? u.searchParams.set('src', SRC.filter(s => state.src.has(s)).join(',')) : u.searchParams.delete('src');
+    state.sel ? u.searchParams.set('sel', state.sel) : u.searchParams.delete('sel');
+    history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
+  }
+  function render() {
+    document.querySelectorAll('[data-mo-view]').forEach(b => b.classList.toggle('is-on', b.dataset.moView === state.view));
+    document.querySelectorAll('[data-mo-src]').forEach(b => b.classList.toggle('is-on', state.src.has(b.dataset.moSrc)));
+    document.querySelectorAll('[data-mo-side]').forEach(b => {
+      b.classList.toggle('is-on', b.dataset.moSide === state.side);
+      b.hidden = state.view === 'people' && b.dataset.moSide === 'agree';
+    });
+    if (!data) {
+      F('moSummary').textContent = failed ? tr('smart.failed', 'Smart money is unavailable right now.')
+        : polls >= POLLS ? tr('smart.gave_up', 'The filings are still being read. Reload in a few minutes.')
+        : polls ? tr('smart.warming', 'Reading the filings for the first time…') : tr('smart.loading', 'Loading…');
+      return;
+    }
+    renderSummary();
+    const rows = state.view === 'stocks' ? renderStocks() : renderPeople();
+    renderDetail(rows);
+    renderNote();
+    syncUrl();
+  }
+  function load() {
+    clearTimeout(timer);
+    fetch('/api/smart-money', { credentials: 'same-origin' })
+      .then(r => r.json().then(body => ({ status: r.status, body })))
+      .then(({ status, body }) => {
+        if (!body || !Array.isArray(body.tickers)) throw new Error('bad payload');
+        data = body; failed = false;
+        render();
+        if (status === 202 && ++polls < POLLS) timer = setTimeout(load, POLL_MS);
+      })
+      .catch(() => { failed = true; render(); });
+  }
+  document.addEventListener('click', e => {
+    const v = e.target.closest('[data-mo-view]');
+    if (v) { if (state.view !== v.dataset.moView) { state.view = v.dataset.moView; state.sel = ''; state.shown = PAGE; if (state.view === 'people' && state.side === 'agree') state.side = 'all'; render(); } return; }
+    const s = e.target.closest('[data-mo-src]');
+    if (s) {
+      const k = s.dataset.moSrc;
+      if (state.src.has(k) && state.src.size > 1) state.src.delete(k); else state.src.add(k);
+      state.shown = PAGE; render(); return;
+    }
+    const sd = e.target.closest('[data-mo-side]');
+    if (sd) { state.side = sd.dataset.moSide; state.shown = PAGE; render(); return; }
+    const row = e.target.closest('[data-mo-t], [data-mo-p]');
+    if (row && data && !e.target.closest('a')) {
+      state.sel = row.dataset.moT || row.dataset.moP;
+      renderDetail([]); syncUrl();
+      if (window.matchMedia('(max-width: 999px)').matches) F('moDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+  F('moMore').addEventListener('click', () => { state.shown += PAGE; render(); });
+  F('moSearch').addEventListener('input', () => { state.shown = PAGE; if (data) render(); });
+  document.addEventListener('i18n:langchange', () => render());
+  render();
+  load();
+})();
+</script>
+{% endblock %}

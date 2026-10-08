@@ -368,6 +368,15 @@ Each app follows the same pattern:
   run. See "The ticker box" below. It also feeds the Fundamentals tab's compare
   box, the other way round: local lists first, then Yahoo (see "Comparing
   companies").
+- `sector_map.py` — `/sectors`: every S&P 500 sector, industry group and
+  sub-industry in the rotation map's four quadrants, with members. Built inside
+  breadth's daily download; `build` is pure. See "The sector map" below.
+- `congress.py` — House members' trades from their STOCK Act PTRs (the
+  Clerk's yearly index and each report's PDF). `parse_index`/`parse_ptr` are
+  pure. See "Smart money" below.
+- `smart_money.py` — `/smart-money` and /history's 聪明钱 tab: named fund
+  managers' 13F moves, insiders' Form 4s and House PTRs, by person and by
+  stock. Pure. See "Smart money" below.
 
 ### The asset tracker and 穿透 (`/assets`)
 
@@ -1596,7 +1605,7 @@ The card and the saved reports load on the first open of the tab, never with the
 page. `?tab=research` opens straight onto it (and is where `/login` returns a
 reader who signed in from it); `/agents?ticker=NBIS` pre-fills the run form.
 Every /history tab has such a link (`HISTORY_TABS`: charts, fundamentals, dca,
-news, videos, research). `switchTab` writes `?tab=` into the address on every
+money, news, videos, research). `switchTab` writes `?tab=` into the address on every
 switch, keeping `?lang=` and `?range=`. It uses `replaceState`, so Back leaves
 the page instead of walking back through the tabs. The 🔗 Copy link button
 carries the tab too. The
@@ -3015,6 +3024,131 @@ Tests: `tests/test_insiders.py` (65, on 26 real Form 4s fetched from the box,
 in `tests/fixtures/insiders/`, with each filing's listing row in `index.json`)
 and `tests/check_insiders_endpoints.py` (15, hermetic). Not a DynamoDB table:
 every filing can be fetched again.
+
+### The sector map (`/sectors`, `sector_map.py`)
+
+Asked for 2026-10-07 after openbit.trade/market/sectors ("a good idea to
+borrow"), which sorts 232 sectors and themes into 新启动 / 持续领涨 / 冲高回落 /
+持续弱势 by their 5- and 20-day moves. /markets already draws that map for the
+25 industry groups (its rotation map); /sectors adds the level below, the
+~126 sub-industries the index holds, plus the 11 sectors and 25 groups, each
+with its members.
+
+* **Quadrants are the rotation map's**, under its names (领先 / 转弱 / 落后 /
+  改善): across, the 1M return against the S&P 500; up, the 1W. Coordinates are
+  the returns, not openbit's ranks inside each cell, which spread the dots and
+  lose the distance. Axes fit the 3rd-97th percentile and draw a point beyond
+  on the edge as a diamond, its tooltip the true figure; fitting every point
+  let one sub-industry 40 points out squeeze the other 125 into a corner.
+* **No request of its own.** `gics.prepare` (split out of `performance`) gives
+  the GICS table's share counts, end session and base dates, so a sector's
+  figures here equal /markets' exactly (`test_sectors_agree_with_the_gics_table`).
+  Breadth (risers/fallers on the session), the day's strongest and weakest
+  member, and dollar volume against its own 20-session average come from the
+  same download's volume column. Saved to `cache/sector_map.json`, not into
+  breadth's payload, which /api/breadth serves whole to /markets.
+* **The headline sentence** names the strongest and weakest groups for the
+  chosen window, never a sub-industry of fewer than three companies (26 of the
+  126 are one company: its spike is not money moving into an industry).
+* **Rebuilt after every close.** breadth.py used to rebuild a flat 24 h after
+  process start: a restart found a fresh disk copy, kept it and slept a whole
+  day, so deploys pushed the build back and the GICS table could describe a
+  close two days old. `breadth.next_build_at` is now the first weekday 16:45
+  New York after the last build, or a day, whichever is sooner, and never
+  sooner than the 10-minute retry cooldown. A missing `sector_map.json` (the
+  first deploy, a rebuilt box) builds within 10 minutes of boot.
+
+**A one-session cliff is an unadjusted corporate action, not a trade**
+(`gics.CLIFF_DOWN`/`CLIFF_UP`: below half or above double the close before).
+Found on the first real payload: CTVA closed at $12.57 on 2026-10-01 against
+$77.65 the session before, Corteva's separation, with no action recorded by
+Yahoo. It put Fertilizers at -56% for the week and Materials at -7.9% for the
+month on /markets' table, where the members had made -4.0%. Such a member is
+left out of every window spanning the session, in `performance` as well as
+here, and named in `coverage["cliffs"]`; both pages print the list. MRNA's
++177% on 2026-08-19 is caught too, and may be real: a genuine doubling is rare
+enough in the index to lose from a window, a phantom -84% is not.
+
+On the page: a list (two-line names), the plot and a detail panel (returns
+1D-YTD and against the index, breadth, volume, strongest and weakest, the
+members with their share of the group, a recent index joiner marked "new", a
+cliff marked ⚠, and the level below for a sector or group). Chinese
+sub-industry names are `gics.SUB_INDUSTRY_ZH`, all 163, carried in the payload
+(sectors and groups use the existing `gics.<code>` strings). The pure parts of
+the page are `static/sector_map.js`.
+
+In the header it is Markets' page (the row is full at 13 links), linked from
+/markets' rotation map, the phone menu and both footers. Tests:
+`tests/test_sector_map.py` (40: the hand-checkable arithmetic, date-gating,
+cliffs, the cache, the breadth hook, `next_build_at` across DST, the page's
+strings and links), `tests/test_gics.py`, `node tests/check_sector_map_js.mjs`
+(47) and `tests/check_sectors_money_endpoints.py`.
+
+### Smart money (`/smart-money`, `smart_money.py`, `congress.py`) and /history's 聪明钱 tab
+
+Asked for 2026-10-07 after openbit.trade/people and /stocks/dossier: the
+people whose trades are public, read side by side. Three disclosures, two of
+them already on this site:
+
+| Source | Module | Clock |
+|---|---|---|
+| Named fund managers, 13F | sec13f.py | quarter-end snapshot, filed up to 45 days later |
+| Insiders, Form 4 | insiders.py | within two business days |
+| House members, PTR | congress.py (new) | within 45 days of the trade |
+
+openbit's fourth, influencers' posts, is opinion rather than money and is not
+borrowed.
+
+**Same way (同向)** is two or more sources on one side and none on the other,
+over 90 days for Form 4s and PTRs and the latest quarter for 13Fs, with the
+days between the agreeing sources' latest side-setting dates shown ("↔ 42 days
+apart"): "two sources buying" can mean two moves four months apart. Opposite
+sides are a split, not an agreement. What sets a side, and what does not:
+
+* 13F: opened and added are buying, trimmed selling, among each fund's 50
+  largest positions (all `holdings` carries). An exit cannot be told from a
+  position falling below 50th, so none is claimed.
+* Form 4: open-market buys and sells; a 10b5-1 plan trade, or a purchase in an
+  offering, is listed and sets no side.
+* PTR: stock both ways; options bought as calls (buy) or puts (sell); a sale
+  of options, a bond or a fund sets none.
+
+**Who counts as a person** is `smart_money.PEOPLE`: 26 discretionary managers
+mapped from sec13f's fund names (Buffett, Ackman, Druckenmiller, Tepper, Wood
+...), with Chinese names and "runs" or "founded" (Dalio, Soros, Singer: the
+filing is the firm's). Index giants, quants, market makers and multi-manager
+pods stay on /13f and in a stock's dossier as "also among the 50 largest at",
+but never as a person: "Ken Griffin bought X" is not a story a pod's 13F tells.
+
+**congress.py** reads the Clerk's keyless files: `{year}FD.zip` (2026 had
+1,746 filings on 2026-10-07, 415 of them PTRs) and each PTR's PDF through
+pdfplumber's text (the table reader merged a page's first row into one cell).
+On 48 real reports every one of 450 trades parsed (`tests/fixtures/house_ptr`):
+a trade's first line carries owner, type, both dates and the amount's start;
+the asset's name and the amount's upper bound wrap onto the following lines;
+the column header repeats at page breaks, inside a trade too; and the PDF's
+font leaves NULs for three labels' letters (Filing Status, Subholding Of,
+Description). A paper filing (DocID 8/9, 70 of the year's 533) is a scan:
+listed and linked, never parsed. A thread in the master fetches the indexes
+every 3 h and each new report paced 1.5 s apart (a new box backfills a year,
+~533 reports, in ~13 minutes), and writes `cache/congress/feed.json`, which
+workers read on its mtime. Not a DynamoDB table: every report can be fetched
+again. `MEMBER_ZH` names a handful of members readers know in Chinese and
+transliterates nobody else.
+
+**/history/<t>?tab=money** is the dossier (`/api/smart-money/<t>`): the
+sources' sides and agreement, the next earnings date from the ticker record as
+the event that tests them (openbit's 下一个能验证它的事件; none is shown when the
+listed date has passed), and three cards: named managers holding it with
+weight and action, then the other tracked funds; its insiders' Form 4s (a
+company outside the sweep says so rather than "none"); and House trades with
+owner, range, lag and a link to the PTR.
+
+/api/smart-money is recomputed when one of the three caches moves, else at most
+every 10 minutes (~440 KB, ~60 KB gzipped on real data). The page is 13F's in
+the header and is linked from /13f, /insiders, the phone menu and both footers.
+Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (18) and
+`tests/check_sectors_money_endpoints.py` (15, hermetic).
 
 ### Prediction markets (`/predictions`)
 

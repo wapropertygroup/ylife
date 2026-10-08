@@ -597,6 +597,12 @@ def create_app() -> Flask:
     from ystocker.insiders import start_background_thread as _start_insiders_thread
     _start_insiders_thread()
 
+    # House members' trades (/smart-money): the Clerk's yearly index every 3 h
+    # and each new PTR, paced 1.5 s apart; a new box backfills a year (~535
+    # reports) in about a quarter of an hour. See ystocker/congress.py.
+    from ystocker.congress import start_background_thread as _start_congress_thread
+    _start_congress_thread()
+
     # Sign-up mails to the owner: seeds ystocker-users once from the tables that
     # already hold readers' addresses, so nobody who was here before the mails
     # began is announced as new. See ystocker/signups.py.

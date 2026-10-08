@@ -875,6 +875,7 @@
   </div>
   <div class="gics-map-box"><canvas id="gicsMapCanvas" role="img"></canvas></div>
   <div id="gicsMapNote" class="gics-note"></div>
+  <p class="gics-note"><a href="{{ url_for('main.sectors_page') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="sectors.markets_link">Every industry on the sector map →</a></p>
 </div>
 
 <!-- ── Growth vs Broad Market Rotation ──────────────────────── -->
@@ -6058,9 +6059,20 @@ function _renderGicsNote() {
       + (d.stale ? ' ' + t('markets.gics_stale', 'Not refreshed since — a rebuild is pending.') : ''),
     t('markets.gics_note_etf', ''),
     t('markets.gics_note_method', '').replace('{date}', d.weights_asof || ''),
+    _gicsCliffNote(d, t),
     _GICS.mode === 'wchg' ? t('markets.gics_note_wchg', '') : t('markets.gics_note_small', ''),
   ].filter(Boolean);
   el.innerHTML = lines.map(x => `<p>${_gicsEsc(x)}</p>`).join('');
+}
+
+// Members gics.py left out of windows spanning a one-day break (a split or a
+// spin-off the price history was not re-based for), named so a reader can
+// tell why a sector's figure differs from its ETF's.
+function _gicsCliffNote(d, t) {
+  const cl = (d.coverage && d.coverage.cliffs) || [];
+  if (!cl.length) return '';
+  const list = cl.map(c => `${c.t} ${c.r > 0 ? '+' : '−'}${Math.abs(c.r).toFixed(1)}% (${c.d})`).join(', ');
+  return t('markets.gics_cliffs', 'Left out of any window spanning a one-day break: {list}.').replace('{list}', list);
 }
 
 function _gicsMessage(key, fallback) {

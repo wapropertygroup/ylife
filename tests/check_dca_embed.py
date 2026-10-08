@@ -164,7 +164,7 @@ class DcaEmbed(unittest.TestCase):
         listed = set(re.findall(r"'(\w+)'", tabs))
         buttons = set(re.findall(r'onclick="switchTab\(\'(\w+)\'\)"', html))
         self.assertEqual(buttons, listed)
-        self.assertEqual(listed, {"charts", "fundamentals", "dca", "news", "videos", "research"})
+        self.assertEqual(listed, {"charts", "fundamentals", "dca", "money", "news", "videos", "research"})
         self.assertIn("_writeTabToAddress(tab)", html)
         self.assertIn("history.replaceState", html)
 

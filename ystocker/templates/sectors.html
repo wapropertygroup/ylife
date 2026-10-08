@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% block title %}yStocker — Sector map{% endblock %}
+{% block title_key %}sectors.page_title{% endblock %}
+
+{% block content %}
+<style>
+  /* Hand-written, as on /insiders: the list, the plot and the panel are built
+     in JS, and a Tailwind class that only appears in a template literal can be
+     missing from the compiled bundle. Shared roles come from base.html's --t-*
+     vocabulary; up/down ink is light-first with .dark overriding. The quadrant
+     colours are the /markets rotation map's. */
+  :root { --sm-up: #047857; --sm-down: #be123c; --sm-lead: #059669; --sm-weak: #b45309; --sm-lag: #dc2626; --sm-improve: #0284c7; }
+  .dark { --sm-up: #34d399; --sm-down: #fb7185; --sm-lead: #34d399; --sm-weak: #fbbf24; --sm-lag: #f87171; --sm-improve: #38bdf8; }
+  .sm-h1 { font-size: 22px; font-weight: 700; color: var(--t-ink-strong); margin: 0 0 4px; }
+  .sm-lede { font-size: 13px; line-height: 1.55; color: var(--t-ink-muted); margin: 0 0 14px; max-width: 62rem; }
+  .sm-verdict { font-size: 14px; line-height: 1.6; color: var(--t-ink); margin: 0 0 14px; padding: 10px 14px;
+                border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); }
+  .sm-verdict b { color: var(--t-ink-strong); font-weight: 600; }
+  .sm-verdict .sm-tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+                        color: var(--t-accent-ink); margin-right: 8px; }
+  .sm-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+  .sm-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sm-chip { font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 999px; cursor: pointer; line-height: 1.3;
+             border: 1px solid var(--t-line-strong); background: transparent; color: var(--t-ink-muted); white-space: nowrap; }
+  .sm-chip:hover { color: var(--t-ink); border-color: var(--t-line-hover); }
+  .sm-chip.is-on { color: var(--t-accent-ink); border-color: var(--t-accent); background: rgba(99,102,241,.12); }
+  .sm-chip .sm-cnt { font-variant-numeric: tabular-nums; opacity: .75; margin-left: 3px; }
+  .sm-chip .sm-qdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+  .sm-search { flex: 1 1 14rem; min-width: 0; padding: 7px 12px; border-radius: 999px; font-size: 13px;
+               border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong); }
+  .sm-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+  .sm-crumb { font-size: 12px; color: var(--t-ink-muted); margin: -4px 0 10px; }
+  .sm-crumb[hidden] { display: none; }
+  .sm-crumb button { font: inherit; color: var(--t-accent-ink); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+
+  .sm-main { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr);
+             grid-template-areas: "chart" "list" "detail"; }
+  @media (min-width: 760px) {
+    .sm-main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "chart chart" "list detail"; }
+  }
+  @media (min-width: 1180px) {
+    .sm-main { grid-template-columns: minmax(0, 350px) minmax(0, 1fr) minmax(0, 310px); grid-template-areas: "list chart detail"; }
+  }
+  .sm-card { min-width: 0; border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); }
+  .sm-list-wrap { grid-area: list; overflow: hidden; display: flex; flex-direction: column; }
+  .sm-chart-wrap { grid-area: chart; padding: 10px 10px 6px; }
+  .sm-detail { grid-area: detail; padding: 14px; }
+  .sm-chart-box { position: relative; height: 360px; }
+  @media (min-width: 760px) { .sm-chart-box { height: 460px; } }
+  @media (min-width: 1180px) { .sm-chart-box { height: 600px; } }
+  .sm-chart-note { font-size: 11px; line-height: 1.5; color: var(--t-ink-dim); margin: 6px 4px 2px; }
+
+  /* The list: one grid for the head and every row. */
+  .sm-lhead, .sm-row { display: grid; align-items: center; gap: 0 8px; padding: 7px 10px;
+                       grid-template-columns: minmax(0, 1fr) 1.6rem 3.3rem 3.3rem 3.3rem; }
+  .sm-lhead { font-size: 10.5px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase; letter-spacing: .03em;
+              border-bottom: 1px solid var(--t-line); position: sticky; top: 0; background: var(--t-surface); z-index: 1; }
+  .sm-lhead [data-sm-sort] { cursor: pointer; user-select: none; }
+  .sm-lhead [data-sm-sort]:hover, .sm-lhead .is-sorted { color: var(--t-accent-ink); }
+  .sm-rows { overflow-y: auto; max-height: 520px; }
+  @media (min-width: 1180px) { .sm-rows { max-height: 640px; } }
+  .sm-row { border-top: 1px solid var(--t-line); cursor: pointer; border-left: 3px solid transparent; padding-left: 7px; }
+  .sm-row:first-child { border-top: 0; }
+  .sm-row:hover { background: var(--t-surface-alt); }
+  .sm-row.is-sel { background: rgba(99,102,241,.10); }
+  .sm-row.q-lead { border-left-color: var(--sm-lead); } .sm-row.q-weak { border-left-color: var(--sm-weak); }
+  .sm-row.q-lag { border-left-color: var(--sm-lag); } .sm-row.q-improve { border-left-color: var(--sm-improve); }
+  .sm-name { min-width: 0; }
+  /* Two lines before an ellipsis: "Independent Power Producers & Energy
+     Traders" truncated to one line at this width read "Independ…". */
+  .sm-nm { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+           font-size: 12.5px; line-height: 1.3; color: var(--t-ink-strong); overflow-wrap: anywhere; }
+  .sm-par { display: block; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sm-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--t-ink); white-space: nowrap; }
+  .sm-lhead .sm-num { font-size: 10.5px; color: var(--t-ink-dim); }
+  .sm-num.is-win { font-weight: 600; }
+  .sm-n { text-align: right; font-size: 11px; color: var(--t-ink-dim); font-variant-numeric: tabular-nums; }
+  .sm-up { color: var(--sm-up); } .sm-down { color: var(--sm-down); }
+  .sm-empty { font-size: 13px; color: var(--t-ink-muted); padding: 14px 12px; }
+
+  /* The panel */
+  .sm-d-kicker { font-size: 11px; color: var(--t-ink-dim); margin: 0 0 2px; }
+  .sm-d-kicker button { font: inherit; color: var(--t-accent-ink); background: none; border: 0; padding: 0; cursor: pointer; }
+  .sm-d-title { font-size: 17px; font-weight: 700; color: var(--t-ink-strong); margin: 0 0 2px; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
+  .sm-d-sub { font-size: 12px; color: var(--t-ink-muted); margin: 0 0 10px; }
+  .sm-quad { font-size: 12px; line-height: 1.5; color: var(--t-ink); padding: 7px 10px; border-radius: 9px; margin: 0 0 10px;
+             border: 1px solid var(--t-line); }
+  .sm-quad b { font-weight: 700; }
+  .sm-quad.q-lead b { color: var(--sm-lead); } .sm-quad.q-weak b { color: var(--sm-weak); }
+  .sm-quad.q-lag b { color: var(--sm-lag); } .sm-quad.q-improve b { color: var(--sm-improve); }
+  .sm-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0 0 10px; }
+  .sm-cell { padding: 6px 4px; border-radius: 8px; background: var(--t-surface-alt); text-align: center; min-width: 0; }
+  .sm-cell .k { display: block; font-size: 10px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase; }
+  .sm-cell .v { display: block; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sm-cell .r { display: block; font-size: 10px; color: var(--t-ink-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sm-facts { list-style: none; margin: 0 0 12px; padding: 0; font-size: 12px; color: var(--t-ink); }
+  .sm-facts li { padding: 4px 0; border-top: 1px dashed var(--t-line); display: flex; justify-content: space-between; gap: 10px; }
+  .sm-facts li span:first-child { color: var(--t-ink-muted); }
+  .sm-facts a { color: var(--t-ink-strong); text-decoration: none; font-weight: 600; }
+  .sm-facts a:hover { color: var(--t-accent-ink); text-decoration: underline; }
+  .sm-h3 { font-size: 12px; font-weight: 700; color: var(--t-ink-strong); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+  .sm-mem { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .sm-mem th { font-size: 10px; font-weight: 600; color: var(--t-ink-dim); text-align: right; padding: 3px 4px; text-transform: uppercase; }
+  .sm-mem th:first-child, .sm-mem td:first-child { text-align: left; }
+  .sm-mem td { padding: 5px 4px; border-top: 1px solid var(--t-line); text-align: right; font-variant-numeric: tabular-nums; color: var(--t-ink); white-space: nowrap; }
+  .sm-mem td:first-child { white-space: normal; min-width: 0; }
+  .sm-mem a { color: var(--t-ink-strong); font-weight: 600; text-decoration: none; }
+  .sm-mem a:hover { color: var(--t-accent-ink); text-decoration: underline; }
+  .sm-mem .nm { display: block; font-size: 10.5px; font-weight: 400; color: var(--t-ink-dim); max-width: 9.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sm-mem .new { font-size: 9.5px; font-weight: 700; color: var(--t-accent-ink); margin-left: 4px; }
+  .sm-kids { list-style: none; margin: 0; padding: 0; }
+  .sm-kids li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px solid var(--t-line); font-size: 12px; cursor: pointer; }
+  .sm-kids li:hover .k { color: var(--t-accent-ink); }
+  .sm-kids .k { color: var(--t-ink-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sm-more { font-size: 12px; color: var(--t-accent-ink); background: none; border: 0; padding: 6px 0 0; cursor: pointer; }
+  .sm-note { font-size: 11.5px; line-height: 1.6; color: var(--t-ink-dim); margin: 14px 0 0; }
+  .sm-note p + p { margin-top: 2px; }
+  .sm-note a { color: var(--t-accent-ink); }
+</style>
+
+<h1 class="sm-h1" data-i18n="sectors.title">Sector map</h1>
+<p class="sm-lede" data-i18n="sectors.lede">Every S&amp;P 500 industry, placed by how it has done against the index over the past month (across) and the past week (up). Each bubble is an industry; its area is its weight in the index, its colour the move over the window you pick. Built from the companies' own closing prices after every session.</p>
+
+<div id="smVerdict" class="sm-verdict" aria-live="polite" data-i18n="sectors.loading">Loading the sector map…</div>
+
+<div class="sm-controls">
+  <div class="sm-group" role="group" aria-label="Level">
+    <button type="button" class="sm-chip" data-sm-level="sector" data-i18n="sectors.level_sector">Sectors</button>
+    <button type="button" class="sm-chip" data-sm-level="group" data-i18n="sectors.level_group">Industry groups</button>
+    <button type="button" class="sm-chip" data-sm-level="sub" data-i18n="sectors.level_sub">Industries</button>
+  </div>
+  <div class="sm-group" role="group" aria-label="Window">
+    <button type="button" class="sm-chip" data-sm-win="1D" data-i18n="sectors.win_1D">1 day</button>
+    <button type="button" class="sm-chip" data-sm-win="1W" data-i18n="sectors.win_1W">1 week</button>
+    <button type="button" class="sm-chip" data-sm-win="1M" data-i18n="sectors.win_1M">1 month</button>
+  </div>
+  <div class="sm-group" id="smQuads" role="group" aria-label="Quadrant"></div>
+  <input id="smSearch" class="sm-search" type="search" autocomplete="off" spellcheck="false"
+         placeholder="Filter industries or companies" data-i18n-placeholder="sectors.search_ph">
+</div>
+<p id="smCrumb" class="sm-crumb" hidden></p>
+
+<div class="sm-main">
+  <section class="sm-card sm-list-wrap" aria-label="Industries">
+    <div id="smHead"></div>
+    <div id="smRows" class="sm-rows"></div>
+  </section>
+  <section class="sm-card sm-chart-wrap">
+    <div class="sm-chart-box"><canvas id="smChart" role="img" aria-label="Sector map"></canvas></div>
+    <p id="smChartNote" class="sm-chart-note"></p>
+  </section>
+  <aside id="smDetail" class="sm-card sm-detail" aria-live="polite"></aside>
+</div>
+<div id="smNote" class="sm-note"></div>
+
+<script src="{{ url_for('static', filename='sector_map.js') }}?v={{ cache_bust or 'dev' }}"></script>
+<script>
+// The figures come from /api/sectors (ystocker/sector_map.py), built inside
+// breadth's daily download after each close and read from its file. Before
+// the first build has run the API answers 202 and the page polls, with a
+// bound, always ending on a drawn state. Everything here is composed where
+// I18n.apply() cannot reach, so it re-renders on a language switch. The pure
+// parts (rows, the sentence, axes, labels) are static/sector_map.js.
+(function () {
+  const SM = window.SectorMap;
+  const F = id => document.getElementById(id);
+  const tr = (key, fallback) => (typeof I18n !== 'undefined' && I18n.t(key)) || fallback;
+  const fill = (s, vals) => s.replace(/\{(\w+)\}/g, (m, k) => (k in vals ? vals[k] : m));
+  const zh = () => (document.documentElement.lang || '').indexOf('zh') === 0;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pick = (v, ok, dflt) => (ok.indexOf(v) >= 0 ? v : dflt);
+  const POLLS = 36, POLL_MS = 5000;
+  const MEMBERS_SHOWN = 12;
+  // Written out whole, not built from a prefix, so a scan of this template
+  // finds each key and test_sector_map_page checks it exists in both languages.
+  const QUAD_KEY = { lead: 'markets.gics_map_q_lead', weak: 'markets.gics_map_q_weak',
+                     lag: 'markets.gics_map_q_lag', improve: 'markets.gics_map_q_improve' };
+  const QUAD_DESC = { lead: 'sectors.q_lead_desc', weak: 'sectors.q_weak_desc',
+                      lag: 'sectors.q_lag_desc', improve: 'sectors.q_improve_desc' };
+  const LEVEL_KEY = { sector: 'sectors.level_sector', group: 'sectors.level_group', sub: 'sectors.level_sub' };
+  const NOUN_KEY = { sector: 'sectors.noun_sector', group: 'sectors.noun_group', sub: 'sectors.noun_sub' };
+  const ONE_KEY = { sector: 'sectors.one_sector', group: 'sectors.one_group', sub: 'sectors.one_sub' };
+  const WIN_KEY = { '1D': 'sectors.win_1D', '1W': 'sectors.win_1W', '1M': 'sectors.win_1M',
+                    '3M': 'sectors.win_3M', 'YTD': 'sectors.win_YTD' };
+  const COL_KEY = { '1D': 'sectors.col_1D', '1W': 'sectors.col_1W', '1M': 'sectors.col_1M',
+                    '3M': 'sectors.col_3M', 'YTD': 'sectors.col_YTD' };
+
+  // Colours: the theme's own, read once (a theme switch reloads a page with a canvas).
+  const DARK = document.documentElement.classList.contains('dark');
+  const RGB = DARK
+    ? { up: [52, 211, 153], down: [248, 113, 113], flat: [100, 116, 139] }
+    : { up: [4, 120, 87], down: [190, 18, 60], flat: [100, 116, 139] };
+  const QCOL = {
+    lead:    { solid: CT.c('#34d399'), wash: 'rgba(52,211,153,0.06)' },
+    weak:    { solid: CT.c('#fbbf24'), wash: 'rgba(251,191,36,0.06)' },
+    lag:     { solid: CT.c('#f87171'), wash: 'rgba(248,113,113,0.06)' },
+    improve: { solid: CT.c('#38bdf8'), wash: 'rgba(56,189,248,0.06)' },
+  };
+  const INK = { ring: CT.c('#0f172a'), ink: CT.c('#cbd5e1'), strong: CT.c('#e2e8f0'), quad: CT.c('#64748b'),
+                zero: CT.c('#475569'), grid: CT.c('#1e293b'), tick: CT.c('#94a3b8'), faded: CT.c('rgba(100,116,139,0.18)'),
+                sel: CT.c('#e2e8f0') };
+
+  const params = new URLSearchParams(location.search);
+  const state = {
+    level: pick(params.get('level'), SM.LEVELS, 'sub'),
+    win: pick(params.get('win'), SM.WINDOWS, '1D'),
+    quad: pick(params.get('quad'), SM.QUADS, ''),
+    parent: params.get('in') || '',
+    sel: params.get('sel') || '',
+    sort: null,
+    membersAll: false,
+  };
+  let data = null, polls = 0, timer = null, failed = false, chart = null;
+
+  // ── formatting ──────────────────────────────────────────────────────────
+  const pct = (v, d) => (typeof v === 'number' && isFinite(v)
+    ? (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(d == null ? (Math.abs(v) >= 10 ? 1 : 2) : d) + '%' : '—');
+  const pts = v => (typeof v === 'number' && isFinite(v)
+    ? (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(Math.abs(v) >= 10 ? 1 : 2) : '—');
+  const cls = v => (typeof v === 'number' ? (v > 0 ? 'sm-up' : v < 0 ? 'sm-down' : '') : '');
+  const fmtDay = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
+    { timeZone: 'UTC', month: 'short', day: 'numeric' }) : '—');
+  const historyUrl = t => '/history/' + encodeURIComponent(t);
+
+  function labelOf(row, level) {
+    return SM.label(row, level || state.level, zh(), k => (typeof I18n !== 'undefined' ? I18n.t(k) : ''));
+  }
+  const sectorName = code => tr('gics.' + code, ((data && data.levels.sector) || []).find(s => s.id === code)?.name || code);
+  const groupName = code => tr('gics.' + code, ((data && data.levels.group) || []).find(g => g.id === code)?.name || code);
+  function parentLabel(row, level) {
+    if (level === 'sub') return groupName(row.group) === sectorName(row.sector)
+      ? sectorName(row.sector) : sectorName(row.sector) + ' › ' + groupName(row.group);
+    if (level === 'group') return sectorName(row.sector);
+    return '';
+  }
+  const parentRow = () => {
+    if (!state.parent || !data) return null;
+    return (state.parent.length === 2 ? data.levels.sector : data.levels.group).find(r => r.id === state.parent) || null;
+  };
+
+  // ── selection ───────────────────────────────────────────────────────────
+  function visibleRows() {
+    return SM.select(data, state.level, {
+      quad: state.quad, query: F('smSearch').value, parent: state.parent, win: state.win,
+      sort: state.sort || { key: state.win, dir: -1 }, members: data.members, names: data.names,
+      labelOf: r => labelOf(r),
+    });
+  }
+  // Every row of the level and drill-down, whatever the quadrant and search:
+  // the plot keeps them as faded context so its frame holds still.
+  function contextRows() {
+    return SM.select(data, state.level, { parent: state.parent, win: state.win });
+  }
+  function selectedRow() {
+    const rows = data.levels[state.level] || [];
+    return rows.find(r => r.id === state.sel) || null;
+  }
+
+  // ── the sentence ────────────────────────────────────────────────────────
+  function renderVerdict() {
+    const v = SM.verdict(data, state.level, state.win, 3);
+    const lead = state.win === '1D'
+      ? fill(tr('sectors.v_lead_1D', '{d} close'), { d: fmtDay(data.asof) })
+      : fill(tr('sectors.v_lead_win', '{w} to {d}'), { w: tr(WIN_KEY[state.win], state.win), d: fmtDay(data.asof) });
+    const noun = tr(NOUN_KEY[state.level], state.level);
+    const parts = [fill(tr('sectors.v_moves', 'of {total} {noun}, {up} rose and {down} fell; the S&P 500 {idx}'),
+      { total: v.total, noun, up: v.up, down: v.down, idx: pct(v.index) })];
+    const q = v.quads;
+    parts.push(SM.QUADS.map(k => `${tr(QUAD_KEY[k], k)} ${q[k]}`).join(' · '));
+    const list = rows => rows.map(r => `${labelOf(r)} ${pct((r.returns || {})[state.win])}`).join(zh() ? '、' : ', ');
+    if (v.top.length) parts.push(fill(tr('sectors.v_top', 'strongest {list}'), { list: list(v.top) }));
+    if (v.bottom.length) parts.push(fill(tr('sectors.v_bottom', 'weakest {list}'), { list: list(v.bottom) }));
+    const sep = zh() ? '；' : '; ';
+    const text = parts.join(sep) + (zh() ? '。' : '.');
+    F('smVerdict').innerHTML = `<span class="sm-tag">${esc(tr('sectors.v_tag', 'Verdict'))}</span><b>${esc(lead)}</b>${zh() ? '：' : ': '}${esc(text)}`;
+  }
+
+  // ── controls ────────────────────────────────────────────────────────────
+  function renderControls() {
+    document.querySelectorAll('[data-sm-level]').forEach(b => b.classList.toggle('is-on', b.dataset.smLevel === state.level));
+    document.querySelectorAll('[data-sm-win]').forEach(b => b.classList.toggle('is-on', b.dataset.smWin === state.win));
+    const c = SM.counts(contextRows());
+    const total = c.lead + c.weak + c.lag + c.improve + c.none;
+    F('smQuads').innerHTML = [`<button type="button" class="sm-chip${state.quad ? '' : ' is-on'}" data-sm-quad="">${esc(tr('sectors.all', 'All'))}<span class="sm-cnt">${total}</span></button>`]
+      .concat(SM.QUADS.map(k => `<button type="button" class="sm-chip${state.quad === k ? ' is-on' : ''}" data-sm-quad="${k}" title="${esc(tr(QUAD_DESC[k], ''))}">`
+        + `<span class="sm-qdot" style="background:${QCOL[k].solid}"></span>${esc(tr(QUAD_KEY[k], k))}<span class="sm-cnt">${c[k]}</span></button>`)).join('');
+    const p = parentRow();
+    F('smCrumb').hidden = !p;
+    if (p) {
+      const pl = state.parent.length === 2 ? 'sector' : 'group';
+      F('smCrumb').innerHTML = esc(fill(tr('sectors.crumb', 'Showing {level} in {name}'),
+        { level: tr(LEVEL_KEY[state.level], state.level), name: labelOf(p, pl) }))
+        + ` · <button type="button" data-sm-unparent>${esc(tr('sectors.crumb_all', 'show all'))}</button>`;
+    }
+  }
+
+  // ── the list ────────────────────────────────────────────────────────────
+  function renderList(rows) {
+    const s = state.sort || { key: state.win, dir: -1 };
+    const head = (key, text, klass) => `<span class="${klass || ''}${s.key === key ? ' is-sorted' : ''}" data-sm-sort="${key}">${esc(text)}${s.key === key ? (s.dir < 0 ? ' ↓' : ' ↑') : ''}</span>`;
+    F('smHead').innerHTML = `<div class="sm-lhead">${head('name', tr(LEVEL_KEY[state.level], ''))}${head('n', '#', 'sm-n')}`
+      + SM.WINDOWS.map(w => head(w, tr(COL_KEY[w], w), 'sm-num')).join('') + '</div>';
+    if (!rows.length) {
+      F('smRows').innerHTML = `<p class="sm-empty">${esc(tr('sectors.none', 'Nothing matches.'))}</p>`;
+      return;
+    }
+    F('smRows').innerHTML = rows.map(r => {
+      const par = parentLabel(r, state.level);
+      const cells = SM.WINDOWS.map(w => {
+        const v = (r.returns || {})[w];
+        return `<span class="sm-num ${cls(v)}${w === state.win ? ' is-win' : ''}">${pct(v)}</span>`;
+      }).join('');
+      return `<div class="sm-row${r.quad ? ' q-' + r.quad : ''}${r.id === state.sel ? ' is-sel' : ''}" data-sm-id="${esc(r.id)}" title="${esc(r.quad ? tr(QUAD_KEY[r.quad], '') : '')}">`
+        + `<span class="sm-name"><span class="sm-nm" title="${esc(labelOf(r))}">${esc(labelOf(r))}</span>${par ? `<span class="sm-par">${esc(par)}</span>` : ''}</span>`
+        + `<span class="sm-n" title="${esc(tr('sectors.n_title', 'Companies in the S&P 500'))}">${r.n}</span>${cells}</div>`;
+    }).join('');
+  }
+
+  // ── the plot ────────────────────────────────────────────────────────────
+  function points() {
+    const shown = new Set(visibleRows().map(r => r.id));
+    const all = contextRows().filter(r => (r.rel || {})[data.trend] != null && (r.rel || {})[data.momentum] != null);
+    const bx = SM.bound(all.map(r => r.rel[data.trend])), by = SM.bound(all.map(r => r.rel[data.momentum]));
+    const width = (F('smChart').parentNode && F('smChart').parentNode.clientWidth) || 600;
+    const scale = SM.scaleOf(all, state.win);
+    const pts = all.map(r => {
+      const cx = SM.clamp(r.rel[data.trend], bx), cy = SM.clamp(r.rel[data.momentum], by);
+      return { x: cx.v, y: cy.v, out: cx.out || cy.out, r: SM.radius(r.weight, width, state.level), id: r.id, row: r,
+               on: shown.has(r.id), fill: SM.colour((r.returns || {})[state.win], scale, RGB.up, RGB.down, RGB.flat) };
+    });
+    // Largest first, so a small bubble is painted over a large one.
+    pts.sort((a, b) => b.row.weight - a.row.weight);
+    return { pts, bx, by, missing: contextRows().length - all.length };
+  }
+
+  const plugin = {
+    id: 'sectorMap',
+    beforeDatasetsDraw(c) {
+      const { ctx, chartArea: a, scales: { x: sx, y: sy } } = c;
+      const INSET = 8, H = 13, DOT = 4;
+      ctx.save();
+      const zx = Math.min(a.right, Math.max(a.left, sx.getPixelForValue(0)));
+      const zy = Math.min(a.bottom, Math.max(a.top, sy.getPixelForValue(0)));
+      [['lead', zx, a.top, a.right - zx, zy - a.top], ['weak', zx, zy, a.right - zx, a.bottom - zy],
+       ['lag', a.left, zy, zx - a.left, a.bottom - zy], ['improve', a.left, a.top, zx - a.left, zy - a.top]]
+        .forEach(([q, l, t, w, h]) => { ctx.fillStyle = QCOL[q].wash; ctx.fillRect(l, t, w, h); });
+      ctx.strokeStyle = INK.zero; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(zx, a.top); ctx.lineTo(zx, a.bottom); ctx.moveTo(a.left, zy); ctx.lineTo(a.right, zy); ctx.stroke();
+      ctx.font = `600 11px ${Chart.defaults.font.family}`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      c.$smQuad = [['lead', 1, 0], ['weak', 1, 1], ['lag', 0, 1], ['improve', 0, 0]].map(([q, right, bottom]) => {
+        const text = tr(QUAD_KEY[q], q), w = DOT * 2 + 4 + ctx.measureText(text).width;
+        const l = right ? a.right - INSET - w : a.left + INSET;
+        const top = bottom ? a.bottom - INSET - H : a.top + INSET;
+        ctx.fillStyle = QCOL[q].solid;
+        ctx.beginPath(); ctx.arc(l + DOT, top + H / 2, DOT, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = INK.quad;
+        ctx.fillText(text, l + DOT * 2 + 4, top + H / 2);
+        return { l, t: top, r: l + w, b: top + H };
+      });
+      ctx.restore();
+    },
+    afterDatasetsDraw(c) {
+      const { ctx, chartArea } = c;
+      const raw = c.data.datasets[0].data, H = 13;
+      const els = c.getDatasetMeta(0).data;
+      // The selected bubble first, then the shown ones heaviest first: labels
+      // go to them while there is room.
+      const order = els.map((el, i) => ({ el, p: raw[i] })).filter(({ p }) => p && p.on);
+      order.sort((a, b) => (b.p.id === state.sel) - (a.p.id === state.sel) || b.p.row.weight - a.p.row.weight);
+      const items = order.map(({ el, p }) => ({ id: p.id, x: el.x, y: el.y, r: el.options.radius, text: labelOf(p.row) }));
+      ctx.save();
+      ctx.font = `500 11px ${Chart.defaults.font.family}`;
+      const placed = SM.placeLabels(items, chartArea, s => ctx.measureText(s).width, H, c.$smQuad || []);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = INK.ring;
+      placed.forEach(({ id, text, box }) => {
+        ctx.font = `${id === state.sel ? 700 : 500} 11px ${Chart.defaults.font.family}`;
+        ctx.fillStyle = id === state.sel ? INK.strong : INK.ink;
+        ctx.strokeText(text, box.l, box.t + H / 2);
+        ctx.fillText(text, box.l, box.t + H / 2);
+      });
+      ctx.restore();
+    },
+  };
+
+  function renderChart() {
+    const canvas = F('smChart');
+    if (typeof Chart === 'undefined' || !canvas) return;
+    const { pts: dots, bx, by, missing } = points();
+    const axis = (k, b) => ({
+      type: 'linear', min: b.min, max: b.max,
+      title: { display: true, text: fill(tr('sectors.axis', '{w} vs S&P 500 (points)'), { w: tr(WIN_KEY[k], k) }),
+               color: INK.tick, font: { size: 11 } },
+      grid: { color: INK.grid }, ticks: { color: INK.tick, includeBounds: false, callback: v => pts(v) },
+    });
+    canvas.setAttribute('aria-label', fill(tr('sectors.aria', 'Sector map of {n} {noun}; the figures are in the list beside it.'),
+      { n: dots.length, noun: tr(NOUN_KEY[state.level], '') }));
+    const ds = {
+      data: dots,
+      backgroundColor: c => (c.raw && c.raw.on ? c.raw.fill : INK.faded),
+      borderColor: c => (c.raw && c.raw.id === state.sel ? INK.sel : (c.raw && c.raw.on ? INK.ring : 'transparent')),
+      borderWidth: c => (c.raw && c.raw.id === state.sel ? 2.5 : 1),
+      hoverBorderWidth: 2,
+      pointStyle: c => (c.raw && c.raw.out ? 'rectRot' : 'circle'),
+    };
+    const tooltip = {
+      callbacks: {
+        title: items => (items.length ? labelOf(items[0].raw.row) : ''),
+        label: item => {
+          const r = item.raw.row;
+          return [
+            fill(tr('sectors.tip_rel', '{m} {mv} · {w} {wv} vs S&P 500'),
+              { m: tr(WIN_KEY[data.trend], data.trend), mv: pts(r.rel[data.trend]), w: tr(WIN_KEY[data.momentum], data.momentum), wv: pts(r.rel[data.momentum]) }),
+            fill(tr('sectors.tip_ret', '{w}: {v}'), { w: tr(WIN_KEY[state.win], state.win), v: pct((r.returns || {})[state.win]) }),
+            fill(tr('sectors.tip_weight', '{n} companies · {wt} of the index'), { n: r.n, wt: pct(r.weight, 2).replace('+', '') }),
+          ].concat(item.raw.out ? [tr('sectors.tip_edge', 'Beyond the frame: drawn on its edge.')] : []);
+        },
+      },
+    };
+    if (chart) {
+      chart.data.datasets[0].data = dots;
+      chart.options.scales.x = axis(data.trend, bx);
+      chart.options.scales.y = axis(data.momentum, by);
+      chart.update('none');
+    } else {
+      chart = new Chart(canvas, {
+        type: 'bubble',
+        data: { datasets: [ds] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          scales: { x: axis(data.trend, bx), y: axis(data.momentum, by) },
+          plugins: { legend: { display: false }, tooltip },
+          onClick: (evt, els) => { if (els.length) choose(chart.data.datasets[0].data[els[0].index].id, true); },
+          onHover: (evt, els) => { evt.native && (evt.native.target.style.cursor = els.length ? 'pointer' : 'default'); },
+        },
+        plugins: [plugin],
+      });
+    }
+    const notes = [fill(tr('sectors.chart_note', 'Across: {m} against the S&P 500; up: {w}. Where the lines cross is the index itself.'),
+      { m: tr(WIN_KEY[data.trend], data.trend), w: tr(WIN_KEY[data.momentum], data.momentum) })];
+    if (dots.some(p => p.out)) notes.push(tr('sectors.chart_edge', 'A diamond on the edge is further out than the frame; hover it for its figures.'));
+    if (missing) notes.push(fill(tr('sectors.chart_missing', '{n} have no figure for one of the windows and are not drawn.'), { n: missing }));
+    F('smChartNote').textContent = notes.join(' ');
+  }
+
+  // ── the panel ───────────────────────────────────────────────────────────
+  function renderDetail() {
+    const r = selectedRow();
+    const box = F('smDetail');
+    if (!r) { box.innerHTML = `<p class="sm-empty">${esc(tr('sectors.pick', 'Pick an industry to see its companies.'))}</p>`; return; }
+    const lv = state.level;
+    const kicker = lv === 'sector' ? tr('sectors.one_sector', 'Sector')
+      : `${tr(ONE_KEY[lv], lv)} · <button type="button" data-sm-goto="${esc(r.sector)}">${esc(sectorName(r.sector))}</button>`
+        + (lv === 'sub' && groupName(r.group) !== sectorName(r.sector) ? ` › <button type="button" data-sm-goto="${esc(r.group)}">${esc(groupName(r.group))}</button>` : '');
+    const per = data.periods || [];
+    const grid = per.map(p => `<div class="sm-cell"><span class="k">${esc(tr(COL_KEY[p], p))}</span>`
+      + `<span class="v ${cls((r.returns || {})[p])}">${pct((r.returns || {})[p])}</span>`
+      + `<span class="r" title="${esc(tr('sectors.vs_title', 'Against the S&P 500, in percentage points'))}">${esc(fill(tr('sectors.vs', 'vs {v}'), { v: pts((r.rel || {})[p]) }))}</span></div>`).join('');
+    const facts = [];
+    if (r.adv != null) facts.push([tr('sectors.f_breadth', 'Last session'), fill(tr('sectors.f_breadth_v', '▲ {a} · ▼ {d}'), { a: r.adv, d: r.dec }) + (r.flat ? ` · = ${r.flat}` : '')]);
+    if (r.vr != null) facts.push([tr('sectors.f_volume', 'Dollar volume'), fill(tr('sectors.f_volume_v', '{x}× its 20-day average'), { x: r.vr.toFixed(2) })]);
+    const tick = m => (m ? `<a href="${historyUrl(m.t)}">${esc(m.t)}</a> <span class="${cls(m.r)}">${pct(m.r)}</span>` : '—');
+    if (r.n > 1 && r.leader) facts.push([tr('sectors.f_leader', 'Best today'), tick(r.leader)]);
+    if (r.n > 1 && r.laggard) facts.push([tr('sectors.f_laggard', 'Worst today'), tick(r.laggard)]);
+    const members = SM.membersOf(data, lv, r);
+    const shown = state.membersAll ? members : members.slice(0, MEMBERS_SHOWN);
+    const names = data.names || {};
+    const cliffMark = m => (m.cliff ? ` <span class="new" title="${esc(fill(tr('sectors.cliff_title', 'A one-day move of {r} on {d} looks like a split or spin-off the price history has not adjusted for; windows spanning it leave it out.'), { r: pct(m.cliff.r, 1), d: m.cliff.d }))}">⚠</span>` : '');
+    const memRows = shown.map(m => `<tr><td><a href="${historyUrl(m.t)}">${esc(m.t)}</a>${cliffMark(m)}`
+      + (m.added ? `<span class="new" title="${esc(fill(tr('sectors.new_title', 'Joined the S&P 500 on {d}; windows that start before then leave it out of this industry’s figure.'), { d: m.added }))}">${esc(tr('sectors.new', 'new'))}</span>` : '')
+      + `<span class="nm" title="${esc(names[m.t] || '')}">${esc(names[m.t] || '')}</span></td>`
+      + `<td>${m.share != null ? m.share.toFixed(m.share >= 10 ? 0 : 1) + '%' : '—'}</td>`
+      + SM.WINDOWS.map(w => `<td class="${cls((m.r || {})[w])}">${pct((m.r || {})[w])}</td>`).join('') + '</tr>').join('');
+    const more = members.length > MEMBERS_SHOWN
+      ? `<button type="button" class="sm-more" data-sm-members>${esc(state.membersAll ? tr('sectors.fewer', 'Show fewer')
+        : fill(tr('sectors.all_members', 'All {n} companies'), { n: members.length }))}</button>` : '';
+    const kids = SM.children(data, lv, r);
+    const kidLevel = lv === 'sector' ? 'group' : 'sub';
+    const kidList = kids.length ? `<h3 class="sm-h3">${esc(tr('sectors.kids', 'Industries in it'))}</h3><ul class="sm-kids">`
+      + kids.map(k => `<li data-sm-child="${esc(k.id)}" data-sm-child-level="${kidLevel}"><span class="k">${esc(labelOf(k, kidLevel))}</span>`
+        + `<span class="${cls((k.returns || {})[state.win])}">${pct((k.returns || {})[state.win])}</span></li>`).join('') + '</ul>' : '';
+    box.innerHTML = `<p class="sm-d-kicker">${kicker}</p>
+      <h2 class="sm-d-title">${esc(labelOf(r))}</h2>
+      <p class="sm-d-sub">${esc(fill(tr('sectors.d_sub', '{n} companies · {w} of the S&P 500'), { n: r.n, w: pct(r.weight, 2).replace('+', '') }))}</p>
+      ${r.quad ? `<p class="sm-quad q-${r.quad}"><b>${esc(tr(QUAD_KEY[r.quad], r.quad))}</b> · ${esc(tr(QUAD_DESC[r.quad], ''))}</p>` : ''}
+      <div class="sm-grid">${grid}</div>
+      <ul class="sm-facts">${facts.map(([k, v]) => `<li><span>${esc(k)}</span><span>${v}</span></li>`).join('')}</ul>
+      ${r.n === 1 ? `<p class="sm-note" style="margin:0 0 8px">${esc(tr('sectors.one_company', 'One company in the index: this industry moves with it.'))}</p>` : ''}
+      <h3 class="sm-h3">${esc(tr('sectors.members', 'Companies'))}</h3>
+      <table class="sm-mem"><thead><tr><th>${esc(tr('sectors.m_ticker', 'Ticker'))}</th><th title="${esc(tr('sectors.m_share_title', 'Share of this industry’s market value'))}">${esc(tr('sectors.m_share', 'Share'))}</th>`
+      + SM.WINDOWS.map(w => `<th>${esc(tr(COL_KEY[w], w))}</th>`).join('') + `</tr></thead><tbody>${memRows}</tbody></table>${more}${kidList}`;
+  }
+
+  function renderNote() {
+    const c = data.coverage || {};
+    const lines = [
+      fill(tr('sectors.note_asof', 'As of the {d} close. Cap-weighted from {p} of the {m} S&P 500 companies, each window counting only companies already in the index when it starts; rebuilt after every close.'),
+        { d: fmtDay(data.asof), p: c.priced || 0, m: c.members || 0 }),
+      tr('sectors.note_quad', 'The quadrants are the /markets rotation map’s: leading is ahead of the index over both the month and the week, weakening ahead over the month only, improving ahead over the week only, lagging behind over both.'),
+      tr('sectors.note_volume', 'Dollar volume is each company’s close times its shares traded, summed per industry, against the 20 sessions before. A one-company industry is never named in the sentence above.'),
+    ];
+    const cl = c.cliffs || [];
+    if (cl.length) {
+      lines.push(fill(tr('markets.gics_cliffs', 'Left out of any window spanning a one-day break: {list}.'),
+        { list: cl.map(x => `${x.t} ${pct(x.r, 1)} (${fmtDay(x.d)})`).join(zh() ? '、' : ', ') }));
+    }
+    F('smNote').innerHTML = lines.map(x => `<p>${esc(x)}</p>`).join('')
+      + `<p><a href="/markets#sectors-rotation">${esc(tr('sectors.note_link', 'The rotation map and GICS table on Markets →'))}</a></p>`;
+  }
+
+  // ── wiring ──────────────────────────────────────────────────────────────
+  function syncUrl() {
+    const u = new URL(location.href);
+    u.searchParams.set('level', state.level);
+    u.searchParams.set('win', state.win);
+    state.quad ? u.searchParams.set('quad', state.quad) : u.searchParams.delete('quad');
+    state.parent ? u.searchParams.set('in', state.parent) : u.searchParams.delete('in');
+    state.sel ? u.searchParams.set('sel', state.sel) : u.searchParams.delete('sel');
+    history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString() + u.hash);
+  }
+
+  function render() {
+    renderControls();
+    if (!data) {
+      F('smVerdict').textContent = failed ? tr('sectors.failed', 'The sector map is unavailable right now.')
+        : polls >= POLLS ? tr('sectors.gave_up', 'Still building from the closing prices. Reload in a few minutes.')
+        : polls ? tr('sectors.warming', 'Building the map from the companies’ closing prices…')
+        : tr('sectors.loading', 'Loading the sector map…');
+      return;
+    }
+    const rows = visibleRows();
+    if (!state.sel || !(data.levels[state.level] || []).some(r => r.id === state.sel)) state.sel = rows.length ? rows[0].id : '';
+    renderVerdict();
+    renderList(rows);
+    renderChart();
+    renderDetail();
+    renderNote();
+    syncUrl();
+  }
+
+  function choose(id, scroll) {
+    state.sel = id; state.membersAll = false;
+    render();
+    const row = document.querySelector(`.sm-row[data-sm-id="${CSS.escape(id)}"]`);
+    if (row && scroll) row.scrollIntoView({ block: 'nearest' });
+    // On a phone the panel is below the list; bring it into view on a pick.
+    if (!scroll && window.matchMedia('(max-width: 759px)').matches) F('smDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function load() {
+    clearTimeout(timer);
+    fetch('/api/sectors', { credentials: 'same-origin' })
+      .then(r => r.json().then(body => ({ status: r.status, body })))
+      .then(({ status, body }) => {
+        if (status === 202) {
+          polls += 1;
+          render();
+          if (polls < POLLS) timer = setTimeout(load, POLL_MS);
+          return;
+        }
+        if (!body || !body.levels) throw new Error('bad payload');
+        data = body; failed = false;
+        render();
+      })
+      .catch(() => { failed = true; render(); });
+  }
+
+  document.addEventListener('click', e => {
+    const lvl = e.target.closest('[data-sm-level]');
+    if (lvl) { if (state.level !== lvl.dataset.smLevel) { state.level = lvl.dataset.smLevel; state.sel = ''; state.parent = ''; state.sort = null; if (data) render(); else renderControls(); } return; }
+    const w = e.target.closest('[data-sm-win]');
+    if (w) { state.win = w.dataset.smWin; if (state.sort && SM.WINDOWS.indexOf(state.sort.key) >= 0) state.sort = null; if (data) render(); else renderControls(); return; }
+    const q = e.target.closest('[data-sm-quad]');
+    if (q) { state.quad = q.dataset.smQuad; if (data) render(); return; }
+    const s = e.target.closest('[data-sm-sort]');
+    if (s && data) {
+      const key = s.dataset.smSort, cur = state.sort || { key: state.win, dir: -1 };
+      state.sort = { key, dir: cur.key === key ? -cur.dir : (key === 'name' ? 1 : -1) };
+      render(); return;
+    }
+    const row = e.target.closest('[data-sm-id]');
+    if (row && data) { choose(row.dataset.smId, false); return; }
+    if (e.target.closest('[data-sm-members]')) { state.membersAll = !state.membersAll; renderDetail(); return; }
+    const kid = e.target.closest('[data-sm-child]');
+    if (kid && data) {
+      state.parent = state.sel; state.level = kid.dataset.smChildLevel; state.sel = kid.dataset.smChild;
+      state.quad = ''; state.sort = null; render(); return;
+    }
+    const go = e.target.closest('[data-sm-goto]');
+    if (go && data) {
+      const code = go.dataset.smGoto;
+      state.level = code.length === 2 ? 'sector' : 'group'; state.sel = code; state.parent = ''; state.quad = ''; state.sort = null;
+      render(); return;
+    }
+    if (e.target.closest('[data-sm-unparent]')) { state.parent = ''; if (data) render(); }
+  });
+  F('smSearch').addEventListener('input', () => { if (data) render(); });
+  document.addEventListener('i18n:langchange', () => { if (chart) { chart.destroy(); chart = null; } render(); });
+  render();
+  load();
+})();
+</script>
+{% endblock %}

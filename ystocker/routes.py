@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import json
 import math
@@ -3614,6 +3614,157 @@ def api_insiders_company(ticker: str):
         return jsonify({**base, "status": "failed", "reason": "daily_cap"}), 503
     log.info("API insiders/%s: cold, look-up %s", symbol, outcome)
     return jsonify({**base, "status": "pending", "queued": outcome != "full"}), 202
+
+
+def _display_names(tickers: Iterable[str]) -> dict[str, str]:
+    """A display name per ticker without fetching: Yahoo's short name from
+    the ticker cache where the site follows the company, else SEC's directory
+    name made readable, else nothing (the page shows the ticker alone)."""
+    from ystocker import directory, insiders
+
+    want = set(tickers)
+    names: dict[str, str] = {}
+    with _cache_lock:
+        for group in (_cache or {}).values():
+            if not isinstance(group, dict):
+                continue
+            for t, rec in group.items():
+                if t in want and t not in names and isinstance(rec, dict) and rec.get("Name"):
+                    names[t] = insiders.yahoo_name(str(rec["Name"]))
+    missing = want - set(names)
+    if missing:
+        listing = directory.peek() or {}
+        for row in listing.get("rows") or ():
+            for t in [row.get("t"), *(row.get("also") or ())]:
+                if t in missing and row.get("n"):
+                    names[t] = insiders.company_name(row["n"])
+                    missing.discard(t)
+            if not missing:
+                break
+    return names
+
+
+# ---------------------------------------------------------------------------
+# The sector map  (/sectors, ystocker/sector_map.py)
+# ---------------------------------------------------------------------------
+
+@bp.route("/sectors")
+def sectors_page():
+    """Every S&P 500 industry in four quadrants (板块图谱). The page draws
+    itself from /api/sectors."""
+    log.info("GET /sectors")
+    return render_template("sectors.html")
+
+
+@bp.route("/api/sectors")
+def api_sectors():
+    """Sectors, industry groups and sub-industries with their quadrants,
+    returns, breadth and members, as of the last close breadth's daily build
+    read. Never builds: 202 until that build has run once. ``names`` gives
+    the members a display name; a crawler gets the 403 every /api/ route
+    gives it."""
+    from ystocker import sector_map
+
+    payload = sector_map.peek()
+    if payload is None:
+        return jsonify({"status": "warming"}), 202
+    names = _display_names(m["t"] for m in payload.get("members") or ())
+    resp = jsonify({**payload, "status": "ok", "names": names})
+    # One build a day: five minutes of browser cache costs nothing.
+    resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Smart money  (/smart-money, ystocker/smart_money.py)
+# ---------------------------------------------------------------------------
+
+_SMART: Dict[str, Any] = {"key": None, "payload": None}
+_SMART_LOCK = threading.Lock()
+#: The payload is recomputed when one of its three caches moves, and at most
+#: this often otherwise; building it walks ~500 House reports' rows and every
+#: followed issuer's Form 4s.
+_SMART_TTL = 10 * 60
+
+
+def _smart_inputs() -> tuple[dict, Optional[dict], Optional[dict]]:
+    """The three caches /smart-money reads, none of them fetched here."""
+    from ystocker import congress, insiders, smart_money
+    from ystocker.sec13f import get_all_holdings
+
+    holdings = get_all_holdings() or {}
+    view = insiders.feed_view(days=smart_money.WINDOW_DAYS, kind_="all", sort="newest", limit=100_000)
+    return holdings, view, congress.peek()
+
+
+@bp.route("/smart-money")
+def smart_money_page():
+    """Fund managers, insiders and House members, by person and by stock
+    (聪明钱). The page draws itself from /api/smart-money."""
+    log.info("GET /smart-money")
+    return render_template("smart_money.html")
+
+
+@bp.route("/api/smart-money")
+def api_smart_money():
+    """The three disclosures by person and by stock, with each source's date
+    and lag. Never fetches. 202 while none of the three has anything yet."""
+    import datetime as _dt
+    from ystocker import congress, smart_money
+    from ystocker.sec13f import get_cache_ts
+
+    holdings, view, house = _smart_inputs()
+    key = (get_cache_ts(), (view.get("coverage") or {}).get("newest_check"),
+           (house or {}).get("built"), _dt.date.today().isoformat())
+    with _SMART_LOCK:
+        cached = _SMART["payload"]
+        fresh = cached is not None and _SMART["key"] == key and time.time() - _SMART.get("ts", 0) < _SMART_TTL
+    if not fresh:
+        cached = smart_money.build(holdings, view, house, today=_dt.date.today(), names_zh=congress.MEMBER_ZH)
+        cached["names"] = _display_names(r["t"] for r in cached["tickers"])
+        with _SMART_LOCK:
+            _SMART.update(key=key, payload=cached, ts=time.time())
+    empty = not cached["people"] or all(p.get("error") for p in cached["people"] if p["kind"] == "fund") \
+        and not cached["tickers"]
+    if empty:
+        return jsonify({**cached, "status": "warming"}), 202
+    return jsonify({**cached, "status": "ok"})
+
+
+@bp.route("/api/smart-money/<ticker>")
+def api_smart_money_ticker(ticker: str):
+    """One stock across the three disclosures, for /history's 聪明钱 tab: the
+    tracked funds holding it, its insiders' trades and the House's, whether
+    they agree, and its next earnings date as the event that tests them."""
+    import datetime as _dt
+    from ystocker import congress, fundamentals, smart_money
+
+    symbol = fundamentals.normalise(ticker)
+    if symbol is None:
+        return jsonify({"error": "invalid ticker"}), 400
+    holdings, view, house = _smart_inputs()
+    out = smart_money.dossier(symbol, holdings, view.get("rows") or [], (house or {}).get("rows") or [],
+                              today=_dt.date.today(), names_zh=congress.MEMBER_ZH)
+    record = _ticker_record(symbol) or {}
+    nxt = record.get("Earnings Date")
+    out["next_earnings"] = str(nxt)[:10] if nxt and str(nxt)[:10] >= _dt.date.today().isoformat() else None
+    out["name"] = _display_names([symbol]).get(symbol)
+    out["sources"] = {
+        "funds": {"as_of": max((f["as_of"] for f in out["funds"] if f.get("as_of")), default=None),
+                  "tracked": sum(1 for fd in holdings.values() if isinstance(fd, dict) and not fd.get("error"))},
+        "insiders": {"followed": insiders_followed(symbol, view)},
+        "house": {"latest_filed": (house or {}).get("latest_filed"), "ready": house is not None},
+    }
+    return jsonify(out)
+
+
+def insiders_followed(symbol: str, view: dict) -> bool:
+    """Whether the Form 4 sweep covers this company (only followed companies'
+    filings are swept; a stock outside them shows no insiders, not none)."""
+    from ystocker import insiders
+
+    cik, _known = insiders.peek_cik(symbol)
+    return bool(cik is not None and insiders.in_universe(cik))
 
 
 # ---------------------------------------------------------------------------

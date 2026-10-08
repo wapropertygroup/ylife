@@ -21,12 +21,12 @@
     at its far end was otherwise out of sight. #}
 {% set _ep = request.endpoint %}
 {% set _links = [
-  ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets',)),
+  ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets', 'main.sectors_page')),
   ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
   ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
   ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page', 'main.insiders_page')),
   ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
-  ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf',)),
+  ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf', 'main.smart_money_page')),
   ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
   ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
   ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),

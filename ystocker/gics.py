@@ -98,6 +98,7 @@ import re
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -131,6 +132,18 @@ MIN_END_COVERAGE = 0.95
 # chosen as the start of a window, but a normal session with a couple of gaps is
 # fine — the missing names simply sit that horizon out.
 MIN_BASE_COVERAGE = 0.50
+
+# A one-session move this large is read as a corporate action the adjusted
+# series has not been re-based for, not as a trade: the close against the one
+# before falling below half, or more than doubling. Yahoo re-bases spin-offs
+# and splits as a rule (module docstring), and when it does not the cliff is
+# total: Corteva's separation on 2026-10-01 left CTVA at $12.57 against
+# $77.65 the session before, with no action recorded, and put Materials at
+# -7.9% over the month where its members had made -4.0%. Such a member is left
+# out of every window that spans the session, as a late joiner is, and named
+# in ``coverage["cliffs"]``. A genuine halving in a day is rare enough in the
+# index to accept losing it from a window; a phantom -84% is not.
+CLIFF_DOWN, CLIFF_UP = 0.5, 2.0
 
 # The session's closing bar is final by ~16:15 ET; a build before this reads
 # the current price into a bar that looks like a close.
@@ -375,6 +388,177 @@ SUB_INDUSTRY_GROUP: dict[str, str] = {
     "Real Estate Operating Companies": "6020",
     "Real Estate Development": "6020",
     "Real Estate Services": "6020",
+}
+
+# Chinese names for every sub-industry above, for /sectors. Here rather than as
+# i18n.js keys: the sector map's payload carries both names, and a test checks
+# the two tables name the same 163 sub-industries, so a GICS revision that adds
+# one cannot reach a Chinese page as an English label. The usual Chinese GICS
+# renderings, with REITs written as such, as Chinese financial media do.
+SUB_INDUSTRY_ZH: dict[str, str] = {
+    "Oil & Gas Drilling": "石油天然气钻井",
+    "Oil & Gas Equipment & Services": "石油天然气设备与服务",
+    "Integrated Oil & Gas": "综合性石油天然气",
+    "Oil & Gas Exploration & Production": "石油天然气勘探与生产",
+    "Oil & Gas Refining & Marketing": "石油天然气炼制与营销",
+    "Oil & Gas Storage & Transportation": "石油天然气储运",
+    "Coal & Consumable Fuels": "煤炭与消费用燃料",
+    "Commodity Chemicals": "基础化工",
+    "Diversified Chemicals": "多元化工",
+    "Fertilizers & Agricultural Chemicals": "化肥与农用化工",
+    "Industrial Gases": "工业气体",
+    "Specialty Chemicals": "特种化工",
+    "Construction Materials": "建筑材料",
+    "Metal, Glass & Plastic Containers": "金属、玻璃与塑料容器",
+    "Paper & Plastic Packaging Products & Materials": "纸与塑料包装",
+    "Aluminum": "铝",
+    "Diversified Metals & Mining": "多元金属与采矿",
+    "Copper": "铜",
+    "Gold": "黄金",
+    "Precious Metals & Minerals": "贵金属与矿产",
+    "Silver": "白银",
+    "Steel": "钢铁",
+    "Forest Products": "林产品",
+    "Paper Products": "纸制品",
+    "Aerospace & Defense": "航空航天与国防",
+    "Building Products": "建筑产品",
+    "Construction & Engineering": "建筑与工程",
+    "Electrical Components & Equipment": "电气部件与设备",
+    "Heavy Electrical Equipment": "重型电气设备",
+    "Industrial Conglomerates": "工业集团",
+    "Construction Machinery & Heavy Transportation Equipment": "工程机械与重型运输设备",
+    "Agricultural & Farm Machinery": "农用机械",
+    "Industrial Machinery & Supplies & Components": "工业机械与零部件",
+    "Trading Companies & Distributors": "贸易公司与经销商",
+    "Commercial Printing": "商业印刷",
+    "Environmental & Facilities Services": "环境与设施服务",
+    "Office Services & Supplies": "办公服务与用品",
+    "Diversified Support Services": "综合支持服务",
+    "Security & Alarm Services": "安保与报警服务",
+    "Human Resource & Employment Services": "人力资源与就业服务",
+    "Research & Consulting Services": "研究与咨询服务",
+    "Data Processing & Outsourced Services": "数据处理与外包服务",
+    "Air Freight & Logistics": "航空货运与物流",
+    "Passenger Airlines": "客运航空",
+    "Marine Transportation": "海运",
+    "Rail Transportation": "铁路运输",
+    "Cargo Ground Transportation": "陆路货运",
+    "Passenger Ground Transportation": "陆路客运",
+    "Airport Services": "机场服务",
+    "Highways & Railtracks": "公路与铁路设施",
+    "Marine Ports & Services": "港口与航运服务",
+    "Automotive Parts & Equipment": "汽车零部件与设备",
+    "Tires & Rubber": "轮胎与橡胶",
+    "Automobile Manufacturers": "汽车制造",
+    "Motorcycle Manufacturers": "摩托车制造",
+    "Consumer Electronics": "消费电子",
+    "Home Furnishings": "家居装饰",
+    "Homebuilding": "住宅建筑",
+    "Household Appliances": "家用电器",
+    "Housewares & Specialties": "家庭用品与特色消费品",
+    "Leisure Products": "休闲用品",
+    "Apparel, Accessories & Luxury Goods": "服装、配饰与奢侈品",
+    "Footwear": "鞋类",
+    "Textiles": "纺织品",
+    "Casinos & Gaming": "赌场与博彩",
+    "Hotels, Resorts & Cruise Lines": "酒店、度假村与邮轮",
+    "Leisure Facilities": "休闲设施",
+    "Restaurants": "餐饮",
+    "Education Services": "教育服务",
+    "Specialized Consumer Services": "专业消费服务",
+    "Distributors": "经销商",
+    "Broadline Retail": "综合零售",
+    "Apparel Retail": "服装零售",
+    "Computer & Electronics Retail": "电脑与电子产品零售",
+    "Home Improvement Retail": "家装零售",
+    "Other Specialty Retail": "其他专业零售",
+    "Automotive Retail": "汽车零售",
+    "Homefurnishing Retail": "家居用品零售",
+    "Drug Retail": "药品零售",
+    "Food Distributors": "食品经销商",
+    "Food Retail": "食品零售",
+    "Consumer Staples Merchandise Retail": "日常消费品零售",
+    "Brewers": "啤酒",
+    "Distillers & Vintners": "烈酒与葡萄酒",
+    "Soft Drinks & Non-alcoholic Beverages": "软饮料与无酒精饮料",
+    "Agricultural Products & Services": "农产品与服务",
+    "Packaged Foods & Meats": "包装食品与肉类",
+    "Tobacco": "烟草",
+    "Household Products": "家庭用品",
+    "Personal Care Products": "个人护理用品",
+    "Health Care Equipment": "医疗设备",
+    "Health Care Supplies": "医疗用品",
+    "Health Care Distributors": "医疗保健经销商",
+    "Health Care Services": "医疗保健服务",
+    "Health Care Facilities": "医疗机构",
+    "Managed Health Care": "管理式医疗",
+    "Health Care Technology": "医疗保健技术",
+    "Biotechnology": "生物科技",
+    "Pharmaceuticals": "制药",
+    "Life Sciences Tools & Services": "生命科学工具与服务",
+    "Diversified Banks": "综合性银行",
+    "Regional Banks": "区域性银行",
+    "Diversified Financial Services": "多元金融服务",
+    "Multi-Sector Holdings": "多元控股",
+    "Specialized Finance": "特殊金融服务",
+    "Commercial & Residential Mortgage Finance": "商业与住宅抵押贷款",
+    "Transaction & Payment Processing Services": "交易与支付处理服务",
+    "Consumer Finance": "消费信贷",
+    "Asset Management & Custody Banks": "资产管理与托管银行",
+    "Investment Banking & Brokerage": "投资银行与经纪",
+    "Diversified Capital Markets": "多元资本市场",
+    "Financial Exchanges & Data": "金融交易所与数据",
+    "Mortgage REITs": "抵押贷款 REIT",
+    "Insurance Brokers": "保险经纪",
+    "Life & Health Insurance": "人寿与健康保险",
+    "Multi-line Insurance": "多元化保险",
+    "Property & Casualty Insurance": "财产与意外险",
+    "Reinsurance": "再保险",
+    "IT Consulting & Other Services": "IT 咨询与其他服务",
+    "Internet Services & Infrastructure": "互联网服务与基础设施",
+    "Application Software": "应用软件",
+    "Systems Software": "系统软件",
+    "Communications Equipment": "通信设备",
+    "Technology Hardware, Storage & Peripherals": "科技硬件、存储与外设",
+    "Electronic Equipment & Instruments": "电子设备与仪器",
+    "Electronic Components": "电子元件",
+    "Electronic Manufacturing Services": "电子制造服务",
+    "Technology Distributors": "科技产品经销商",
+    "Semiconductor Materials & Equipment": "半导体材料与设备",
+    "Semiconductors": "半导体",
+    "Alternative Carriers": "替代运营商",
+    "Integrated Telecommunication Services": "综合电信服务",
+    "Wireless Telecommunication Services": "无线电信服务",
+    "Advertising": "广告",
+    "Broadcasting": "广播",
+    "Cable & Satellite": "有线与卫星电视",
+    "Publishing": "出版",
+    "Movies & Entertainment": "电影与娱乐",
+    "Interactive Home Entertainment": "互动家庭娱乐",
+    "Interactive Media & Services": "互动媒体与服务",
+    "Electric Utilities": "电力公用事业",
+    "Gas Utilities": "燃气公用事业",
+    "Multi-Utilities": "综合公用事业",
+    "Water Utilities": "水务",
+    "Independent Power Producers & Energy Traders": "独立发电商与能源贸易商",
+    "Renewable Electricity": "可再生电力",
+    "Diversified REITs": "多元化 REIT",
+    "Industrial REITs": "工业 REIT",
+    "Hotel & Resort REITs": "酒店与度假村 REIT",
+    "Office REITs": "办公 REIT",
+    "Health Care REITs": "医疗保健 REIT",
+    "Multi-Family Residential REITs": "多户住宅 REIT",
+    "Single-Family Residential REITs": "独栋住宅 REIT",
+    "Retail REITs": "零售 REIT",
+    "Other Specialized REITs": "其他专业 REIT",
+    "Self-Storage REITs": "自助仓储 REIT",
+    "Telecom Tower REITs": "通信塔 REIT",
+    "Timber REITs": "林地 REIT",
+    "Data Center REITs": "数据中心 REIT",
+    "Diversified Real Estate Activities": "多元化房地产业务",
+    "Real Estate Operating Companies": "房地产经营公司",
+    "Real Estate Development": "房地产开发",
+    "Real Estate Services": "房地产服务",
 }
 
 
@@ -816,17 +1000,49 @@ def _r(x: float, digits: int = 2) -> Optional[float]:
     return round(float(x), digits) if x is not None and math.isfinite(x) else None
 
 
-def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = None,
-                until: Any = None) -> dict[str, Any]:
-    """Cap-weighted GICS sector and industry-group returns and weights.
+@dataclass
+class Prepared:
+    """The constituent frame every cap-weighted figure here is read from.
 
-    ``closes`` is a DataFrame of adjusted daily closes, one column per Yahoo
-    symbol, as breadth.py downloads it. ``now`` (epoch seconds) is used only to
-    decide whether the newest bar is a finished session; pass None to trust it.
-    ``until`` ends on the last usable session on or before that date instead of
-    the newest — see :func:`trail`. Returns a JSON-ready dict; see the module
-    docstring for the method.
+    Split out of :func:`performance` so ``sector_map`` aggregates sub-industries
+    with the same share counts, end session and base dates as the sector table,
+    rather than a second copy of the method that could drift from it.
     """
+    px: Any                # members' adjusted closes, tz-naive daily index
+    q: Any                 # constant share counts, indexed by priced member
+    days: Any              # usable sessions, up to and including ``end``
+    end: Any               # the session every figure ends on
+    bases: dict[str, Any]  # period -> its base session, or None
+    added: Any             # each member's index join date (NaT when unknown)
+    p_end: Any             # closes on ``end``, indexed like ``q``
+    live: Any              # members priced on ``end``
+    w_snap: Any            # snapshot weights, indexed by priced column
+    total_w: float         # the snapshot's whole weight, priced or not
+    partial_dropped: bool  # the newest bar was an unfinished session
+    cliffs: dict[str, list[tuple[Any, float]]]  # member -> [(session, move %)]
+
+    def spans_cliff(self, tickers: Any, d0: Any) -> Any:
+        """Which of ``tickers`` had a cliff session after ``d0``, up to ``end``:
+        a boolean Series, the members a window starting at ``d0`` leaves out."""
+        import pandas as pd
+
+        out = pd.Series(False, index=tickers)
+        for t, hits in self.cliffs.items():
+            if t in out.index and any(d0 < d <= self.end for d, _ in hits):
+                out[t] = True
+        return out
+
+    def cliff_list(self, since: Any) -> list[dict[str, Any]]:
+        """Every cliff on or after ``since`` and up to ``end``, for the payload."""
+        rows = [{"t": t, "d": d.date().isoformat(), "r": _r(move)}
+                for t, hits in self.cliffs.items() for d, move in hits
+                if since is not None and since < d <= self.end]
+        return sorted(rows, key=lambda r: (r["d"], r["t"]))
+
+
+def prepare(closes: Any, snap: dict[str, Any], *, now: Optional[float] = None,
+            until: Any = None) -> Prepared:
+    """Share counts, end session and base dates; see :func:`performance`."""
     import pandas as pd
 
     members: dict[str, dict[str, Any]] = snap["members"]
@@ -870,13 +1086,44 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
 
     # Among usable sessions only, so a window never starts on a stray thin row.
     bases: dict[str, Any] = {p: periods.base_date(days, end, p) for p in PERIODS}
+    added = pd.to_datetime(pd.Series({t: members[t].get("added") for t in q.index}), errors="coerce")
+    p_end = px.loc[end, q.index]
+    live = q.index[p_end.notna()]
+    # Session to session over the last close each member has, so a missing
+    # day neither hides a cliff nor invents one.
+    within = px.loc[:end, q.index]
+    ratio = within / within.ffill().shift(1)
+    hit = (ratio < CLIFF_DOWN) | (ratio > CLIFF_UP)
+    cliffs: dict[str, list[tuple[Any, float]]] = {}
+    for t in hit.columns[hit.any().to_numpy()]:
+        cliffs[t] = [(d, (float(ratio.at[d, t]) - 1) * 100) for d in hit.index[hit[t].to_numpy()]]
+    return Prepared(px=px, q=q, days=days, end=end, bases=bases, added=added,
+                    p_end=p_end, live=live, w_snap=w_snap, total_w=total_w,
+                    partial_dropped=partial_dropped, cliffs=cliffs)
+
+
+def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = None,
+                until: Any = None) -> dict[str, Any]:
+    """Cap-weighted GICS sector and industry-group returns and weights.
+
+    ``closes`` is a DataFrame of adjusted daily closes, one column per Yahoo
+    symbol, as breadth.py downloads it. ``now`` (epoch seconds) is used only to
+    decide whether the newest bar is a finished session; pass None to trust it.
+    ``until`` ends on the last usable session on or before that date instead of
+    the newest — see :func:`trail`. Returns a JSON-ready dict; see the module
+    docstring for the method.
+    """
+    import pandas as pd
+
+    members: dict[str, dict[str, Any]] = snap["members"]
+    prep = prepare(closes, snap, now=now, until=until)
+    px, q, end, bases = prep.px, prep.q, prep.end, prep.bases
+    added, p_end, live = prep.added, prep.p_end, prep.live
+    w_snap, total_w, partial_dropped = prep.w_snap, prep.total_w, prep.partial_dropped
 
     group = pd.Series({t: group_of(members[t]["sub"]) for t in q.index})
     sector = group.str[:2]
-    added = pd.to_datetime(pd.Series({t: members[t].get("added") for t in q.index}), errors="coerce")
 
-    p_end = px.loc[end, q.index]
-    live = q.index[p_end.notna()]
     v_now = q[live] * p_end[live]
     tot_now = float(v_now.sum())
     g_now = v_now.groupby(group[live]).sum()
@@ -894,7 +1141,7 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
         ok = p0.notna() & p_end.notna()
         was_member = added.isna() | (added <= d0)
         excluded_new[p] = int((ok & ~was_member).sum())
-        ok = ok & was_member
+        ok = ok & was_member & ~prep.spans_cliff(q.index, d0)
         idx = q.index[ok]
         v0, v1 = q[idx] * p0[idx], q[idx] * p_end[idx]
         t0, t1 = float(v0.sum()), float(v1.sum())
@@ -958,6 +1205,7 @@ def performance(closes: Any, snap: dict[str, Any], *, now: Optional[float] = Non
             "weight_pct": _r(priced_w / total_w * 100, 1),
             "missing": sorted(set(members) - set(live)),
             "excluded_new": excluded_new,
+            "cliffs": prep.cliff_list(min((d for d in bases.values() if d is not None), default=None)),
         },
     }
 

@@ -56,6 +56,15 @@ Caveats
 
 Cache TTL: 24 hours (this is a weekly-resolution chart; intraday refresh is
 pointless and the download costs ~25s).
+
+When it rebuilds
+----------------
+Shortly after each session's close (:func:`next_build_at`), and a day after
+the last build at most. It used to be a flat 24 hours from whenever the
+process started: a restart found a fresh disk copy, kept it, and then slept a
+whole day, so every deploy pushed the next build back, and the GICS table could
+describe a close two days old. The same download now also feeds /sectors
+(:mod:`ystocker.sector_map`), whose 1-day figures are meant to be yesterday's.
 """
 from __future__ import annotations
 
@@ -67,7 +76,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from ystocker import gics
+from ystocker import gics, sector_map
 
 log = logging.getLogger(__name__)
 
@@ -375,6 +384,8 @@ def _build_cache() -> dict[str, Any]:
     # ── GICS sectors and industry groups ────────────────────────────────────
     # Arithmetic on the frame already in hand; see _gics_block().
     gics_block = _gics_block(closes, snap)
+    # And every sub-industry, for /sectors, saved to its own file.
+    _sector_map_block(closes, df, snap)
 
     universe_used = int(live.any().sum())
     asof = pct_above_ma[str(MA_PERIODS[0])]["dates"][-1:] or [""]
@@ -418,6 +429,42 @@ def _gics_block(closes: Any, snap: Optional[dict[str, Any]]) -> Optional[dict[st
         log.warning("Breadth: GICS trail skipped: %s", exc)
         block["trail"] = None
     return block
+
+
+def _sector_map_block(closes: Any, df: Any, snap: Optional[dict[str, Any]]) -> None:
+    """Build and save /sectors' payload from the frame in hand. Never raises:
+    a failure here costs the sector map, not the breadth charts."""
+    if not snap:
+        return
+    try:
+        volumes = df["Volume"] if "Volume" in df.columns.get_level_values(0) else None
+        sector_map.save(sector_map.build(closes, snap, volumes, now=time.time()))
+    except Exception as exc:
+        log.warning("Breadth: sector map skipped: %s", exc)
+
+
+#: When a session's daily bar is final enough to build on, New York time. The
+#: build after it picks up that close; gics.py drops an unfinished bar anyway.
+REBUILD_AFTER_ET = (16, 45)
+
+
+def next_build_at(built_ts: float) -> float:
+    """When the daily build is next due: the first weekday close after the
+    last build (:data:`REBUILD_AFTER_ET`), or a day after it, whichever comes
+    first. Pure. A holiday costs one build that finds no new bar."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    ny = ZoneInfo("America/New_York")
+    built = dt.datetime.fromtimestamp(built_ts, ny)
+    hh, mm = REBUILD_AFTER_ET
+    day = built.date()
+    while True:
+        due = dt.datetime.combine(day, dt.time(hh, mm), tzinfo=ny)
+        if due > built and day.weekday() < 5:
+            break
+        day += dt.timedelta(days=1)
+    return min(due.timestamp(), built_ts + _CACHE_TTL)
 
 
 # ---------------------------------------------------------------------------
@@ -616,9 +663,22 @@ def start_background_thread() -> None:
             log.warning("Breadth background: startup warm failed: %s", exc)
 
         while True:
-            time.sleep(_CACHE_TTL)
+            with _cache_lock:
+                built = _cache_ts
+            due = next_build_at(built) if built else time.time() + _CACHE_TTL
+            # The first deploy of /sectors, or a box whose sector map was lost,
+            # has a fresh breadth copy and no map: build now rather than at the
+            # next close.
+            if not sector_map.exists():
+                due = time.time()
+            # Never sooner than the retry cooldown, so a failing build, or a
+            # due time already past at boot, does not spin, and a deploy does
+            # not open with the heaviest download in the app.
+            wait = max(due - time.time(), _BUILD_RETRY_COOLDOWN)
+            log.info("Breadth background: next rebuild in %.1fh", wait / 3600)
+            time.sleep(wait)
             try:
-                log.info("Breadth background: 24h TTL elapsed — recomputing")
+                log.info("Breadth background: rebuild due — recomputing")
                 # Gated on the daily path too: every warm-up thread started in the
                 # same millisecond and most carry a 24h TTL, so their refreshes
                 # come due simultaneously for the life of the process, not just at

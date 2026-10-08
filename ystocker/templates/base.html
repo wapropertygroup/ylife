@@ -581,12 +581,12 @@
           measured against this row. The page's own link is marked. #}
       {% set _ep = request.endpoint %}
       {% set _nav = [
-        ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets',)),
+        ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets', 'main.sectors_page')),
         ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
         ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
         ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page', 'main.insiders_page')),
         ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
-        ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf',)),
+        ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf', 'main.smart_money_page')),
         ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
         ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
         ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),
@@ -832,11 +832,13 @@
           <div data-navsearch-results class="max-h-60 overflow-y-auto mt-1"></div>
         </div>
         <a href="{{ url_for('main.markets') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="markets.nav">Markets</a>
+        <a href="{{ url_for('main.sectors_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.sectors">Sector map</a>
         <a href="{{ url_for('main.evaluation') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.home">Valuation</a>
         <a href="{{ url_for('main.dca_index') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.dca">DCA</a>
         <a href="{{ url_for('main.companies') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.companies">Companies</a>
         <a href="{{ url_for('main.earnings_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.earnings">Earnings calendar</a>
         <a href="{{ url_for('main.insiders_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.insiders">Insider trades</a>
+        <a href="{{ url_for('main.smart_money_page') }}" class="px-3 py-2.5 rounded-md text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="nav.smart_money">Smart money</a>
         {#
           Commodities collapses and the remaining links sit in a two-column
           grid. Flat, the menu once measured 1279px on an 844px screen, 516px of
@@ -1033,9 +1035,13 @@
       <span aria-hidden="true">🗓</span> <span data-i18n="footer.ical">FOMC Calendar</span>
     </a>
     &nbsp;·&nbsp;
+    <a href="{{ url_for('main.sectors_page') }}" class="hover:text-brand transition" data-i18n="nav.sectors">Sector map</a>
+    &nbsp;·&nbsp;
     <a href="{{ url_for('main.earnings_page') }}" class="hover:text-brand transition" data-i18n="nav.earnings">Earnings calendar</a>
     &nbsp;·&nbsp;
     <a href="{{ url_for('main.insiders_page') }}" class="hover:text-brand transition" data-i18n="nav.insiders">Insider trades</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('main.smart_money_page') }}" class="hover:text-brand transition" data-i18n="nav.smart_money">Smart money</a>
     &nbsp;·&nbsp; <span data-i18n="footer.copyright">© 2025 {{ brand_name }}. All rights reserved.</span>
   </footer>
   {% endif %}

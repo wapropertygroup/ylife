@@ -21,6 +21,7 @@
 <div class="mb-6 sm:mb-8 fade-up">
   <h1 class="text-2xl sm:text-3xl font-bold grad-text mb-1" data-i18n="thirteenf.title">13F Institutional Holdings</h1>
   <p class="text-slate-500 dark:text-slate-400 text-sm" data-i18n="thirteenf.subtitle">Latest quarterly 13F-HR filings from SEC EDGAR · Top 50 equity positions per fund</p>
+  <p class="text-sm mt-1"><a href="{{ url_for('main.smart_money_page') }}" class="text-indigo-700 dark:text-indigo-400 hover:underline" data-i18n="smart.from_13f">Read named managers’ moves beside insiders’ and House members’ trades on Smart money →</a></p>
   {% if cache_last_updated %}
   <p class="text-xs text-slate-500 dark:text-slate-600 mt-1">
     <span data-i18n="thirteenf.data_as_of">Data as of</span> <span data-ts="{{ cache_last_updated | int }}">{{ cache_last_updated | int | datetimeformat }}</span>

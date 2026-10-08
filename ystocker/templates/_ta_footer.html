@@ -30,8 +30,10 @@
         <a href="{{ url_for('main.guide') }}" data-i18n="nav.guide">Guide</a>
         <a href="{{ url_for('main.rss_feed') }}" data-i18n="footer.rss">RSS</a>
         <a href="webcal://{{ request.host }}{{ url_for('main.fomc_calendar') }}" data-i18n="footer.ical">FOMC Calendar</a>
+        <a href="{{ url_for('main.sectors_page') }}" data-i18n="nav.sectors">Sector map</a>
         <a href="{{ url_for('main.earnings_page') }}" data-i18n="nav.earnings">Earnings calendar</a>
         <a href="{{ url_for('main.insiders_page') }}" data-i18n="nav.insiders">Insider trades</a>
+        <a href="{{ url_for('main.smart_money_page') }}" data-i18n="nav.smart_money">Smart money</a>
         {% endif %}
       </nav>
     </div>
