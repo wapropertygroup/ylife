@@ -2301,7 +2301,7 @@ The count works because a run is a fixed sequence and every turn publishes
 exactly one progress event. _RUNNER writes when a role's text changes, and a
 debater's history grows by one speech a turn. The sequence is:
 
-1. each analyst, in roster order;
+1. the analysts, which TradingAgents 0.6 runs at the same time;
 2. bull and bear alternating for `2 × debate_rounds` turns;
 3. the Research Manager, then the Trader;
 4. aggressive, conservative and neutral in turn for `3 × risk_rounds`;
@@ -2316,9 +2316,14 @@ its own copy of the A-share rule `_run` picks the roster by. It maps the package
 arithmetic is `static/agent_progress.js`, pure and Node-tested; agents.html only
 draws it.
 
-Three rules in it:
+Four rules in it:
 
-- **Everything before a turn that has reported counts as done**, because the
+- **The analysts are counted as a set.** 0.6 runs them at once and they report
+  in any order (a run on the box went quality, sentiment, valuation, earnings,
+  market, news). The bar counts the ones in and names the first one still out,
+  in roster order. It used to read the last one in as "everyone before it is
+  done", which put the bar on the Bull with four analysts still working.
+- **A phase with any progress closes every phase before it**, because the
   graph only moves forward. An analyst that publishes nothing (an empty report is
   never written) must not hold the bar at 5/6 while the debate runs.
 - **Every count is clamped to its phase**, so a re-publishing role cannot push
@@ -2329,8 +2334,9 @@ Three rules in it:
 The page counts events by `seq` as a set, not by a high-water mark, so two polls
 answering out of order cannot drop a turn or count one twice.
 
-Tests: `node tests/check_agent_progress.mjs` (25, a whole run event by event,
-naming the speaker at each step) and `tests/test_agents_progress.py` (10,
+Tests: `node tests/check_agent_progress.mjs` (30, a whole run event by event,
+naming the speaker at each step, and the analysts in the order a 0.6 run on the
+box published them) and `tests/test_agents_progress.py` (10,
 including that every planned role is one the runner actually publishes, since a
 name the events never carry leaves the bar at zero for the whole run).
 

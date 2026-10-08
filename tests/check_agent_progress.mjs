@@ -99,9 +99,27 @@ console.log('\na missed event does not stall the bar');
   t('the analysts phase is closed once the debate has started', p.phases[0].state === 'done');
   t('and the count follows the graph, not the events', p.done === 7, `got ${p.done}`);
   t('the bear is up', p.current.role === 'bear');
+}
+
+console.log('\nthe analysts finish in any order');
+{
+  // TradingAgents 0.6 runs them at the same time. This is the order a real
+  // DeepSeek run on the box published them in, 2026-10-08.
+  const box = ['quality', 'sentiment', 'valuation', 'earnings', 'market', 'news'];
+  const first = compute(US, tally(box.slice(0, 1)));
+  t('one in, quality first: one done, not five', first.done === 1, `got ${first.done}`);
+  t('and the first one still out is named', first.current.role === 'market');
+  const three = compute(US, tally(box.slice(0, 3)));
+  t('valuation in, four still out: the debate has not started',
+    three.phases[0].state === 'active' && three.phases[1].state === 'todo' && three.done === 3,
+    `done=${three.done} states=${three.phases.map(x => x.state)}`);
+  const five = compute(US, tally(box.slice(0, 5)));
+  t('five in: news is the one named', five.done === 5 && five.current.role === 'news');
+  const all = compute(US, tally(box));
+  t('all six in: the bull opens round 1', all.done === 6 && all.current.role === 'bull' && all.current.round === 1);
   const q = compute(US, tally(['market', 'news']));
-  t('an analyst skipped mid-roster is counted done once a later one reports', q.done === 3);
-  t('and the next one in order is named', q.current.role === 'earnings');
+  t('market and news in: two done, not three', q.done === 2, `got ${q.done}`);
+  t('and sentiment, the first still out, is named', q.current.role === 'sentiment');
 }
 
 console.log('\ncounts are clamped');

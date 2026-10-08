@@ -3,7 +3,7 @@
  * has published.
  *
  * A run is a fixed sequence of turns (agents.run_plan, which the job poll
- * carries as `plan`): each analyst in roster order, bull and bear alternating
+ * carries as `plan`): the analysts, bull and bear alternating
  * for 2 × debate_rounds turns, the Research Manager, the Trader, aggressive,
  * conservative and neutral in turn for 3 × risk_rounds, and the Portfolio
  * Manager. The child publishes one event per finished turn, so counting events
@@ -11,8 +11,13 @@
  * turns take anything from twenty seconds to several minutes, and a bar driven
  * by elapsed time would be a guess drawn as a measurement.
  *
- * Two rules keep a missed event from stalling the bar. Everything before a
- * turn that has reported counts as done, because the graph only moves forward
+ * TradingAgents 0.6 runs the analysts at the same time, so they finish in any
+ * order: the Analysts phase counts the ones that have reported and names the
+ * first one still out, in roster order. Reading the last one in as "everyone
+ * before it is done" put the bar on the Bull while four analysts still worked.
+ *
+ * Two rules keep a missed event from stalling the bar. A phase with any
+ * progress closes every phase before it, because the graph only moves forward
  * -- an analyst that published nothing (an empty report is never written) must
  * not hold the Analysts phase at 5/6 while the debate goes on. And every count
  * is clamped to its phase, so a role that re-publishes cannot push past it.
@@ -51,13 +56,11 @@
     var debateRounds = rounds(plan.debate_rounds);
     var riskRounds = rounds(plan.risk_rounds);
 
-    // The analysts run one after another, so the last one to report marks
-    // every one before it done as well.
-    var lastAnalyst = -1;
-    analysts.forEach(function (role, i) { if (count(role) > 0) lastAnalyst = i; });
+    // In any order (they run at the same time): the ones in, and who is out.
+    var out = analysts.filter(function (role) { return count(role) === 0; });
 
     var phases = [
-      { key: 'analysts', done: lastAnalyst + 1, total: analysts.length },
+      { key: 'analysts', done: analysts.length - out.length, total: analysts.length },
       { key: 'debate', done: count('bull') + count('bear'), total: 2 * debateRounds },
       { key: 'research_mgr', done: count('research_mgr'), total: 1 },
       { key: 'trader', done: count('trader'), total: 1 },
@@ -85,7 +88,7 @@
     if (active >= 0) {
       var p = phases[active];
       if (p.key === 'analysts') {
-        current = { role: analysts[p.done] };
+        current = { role: out[0] };
       } else if (p.key === 'debate') {
         // Bull opens, then the two alternate: an even count means bull is up.
         current = { role: p.done % 2 === 0 ? 'bull' : 'bear',
