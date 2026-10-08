@@ -14,7 +14,12 @@ const I18n = (() => {
 
     // ── base.html ──────────────────────────────────────────────────────
     'nav.home':           { en: 'Valuation', zh: '估值' },
-    'nav.sectors':        { en: 'Sectors',   zh: '板块' },
+    // The header tabs' short labels; the full names (nav.sectors, nav.earnings,
+    // nav.insiders, further down) are their tooltips and the drawer's links.
+    // This was a second 'nav.sectors', which the later one silently replaced.
+    'nav.sectors_short':  { en: 'Sectors',   zh: '板块' },
+    'nav.earnings_short': { en: 'Earnings',  zh: '财报' },
+    'nav.insiders_short': { en: 'Insiders',  zh: '内部人' },
     // 定投 *is* dollar-cost averaging (定期定额投资), so "DCA 定投" said it twice
     // and was the only mixed-script item in a nav of 市场 / 估值 / 板块 / 宏观.
     'nav.dca':            { en: 'DCA',       zh: '定投' },

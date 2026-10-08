@@ -2610,6 +2610,25 @@ to 1320/1420, measured: 1301px signed out in English, ~1410 signed in with a
 name the chip truncates. With no menu left in the row, the Markets bar
 scrolls sideways at any width it does not fit, not just on a phone.
 
+**Seventeen tabs since 2026-10-08.** Asked for: "a lot of pages missing from
+the tab like smart money? can we add all the missing tabs?". Sectors,
+Earnings, Insiders and Smart money had sat under Markets, Companies and 13F,
+reachable only from the phone menu, the footers and links on other pages.
+Each now has a tab beside the one it sat under, with a short label and the
+long name as the tooltip, as Macro's have.
+- **Scrolling.** Seventeen do not fit the header at any width: it is capped
+  at 1475px, and in English the row needs 1133px where it has 987. So the
+  yStocker header's row scrolls sideways too. Both rows run one script
+  (`_nav_row_script.html`): open on the page's own tab, fade on the side with
+  more, and turn with a mouse wheel, which a desktop needs. Measured: at
+  1512px and up, 14 tabs show in English. In Chinese all 17 fit (901px).
+- **Unchanged.** The switch points stay at 1320/1420.
+- **Not added.** The heatmap was taken out of the nav on purpose on
+  2026-05-30. Portfolio, Posts, Guide and Lookup have their own way in (the
+  account menu, the footer, the search box).
+- **Tests.** `tests/test_nav_tabs.py` pins the two lists to each other, each
+  page to one tab, and every tab to the phone menu.
+
 **On a phone the masthead's links get a row of their own.** Below 960px (880px
 signed out) the bar has no room for them. Before, a phone then had no way to
 Docs, the Research Lab, Samples or Pricing from the header at all. Off the
@@ -2928,10 +2947,9 @@ three weeks ahead fresh: about 25 requests cold, then a handful an hour. Weeks
 are clamped to ±8 around today, so a crawler walking `?week=` back to 1990 is
 answered with the nearest allowed week rather than fetched.
 
-**It is in the Companies section, not the nav row.** The header fits 13 links at
-its 1320px switch point with 19px to spare. A fourteenth link would push 1440px
-laptops onto the compact menu. So `/earnings` marks Companies as current, as a
-sector page marks Valuation. It is linked from the mobile drawer, both footers
+**It has its own tab** (Earnings, after Companies) since 2026-10-08. Until
+then it sat in the Companies section, because the row was full at 13 links
+(see "Seventeen tabs"). It is also linked from the mobile drawer, both footers
 and the `/markets` card. `held` comes from the reader's `/assets` positions,
 best effort: an unreadable store costs the highlight, not the page.
 
@@ -3028,9 +3046,9 @@ again on view. A looked-up company joins the market-wide feed for 24 h after
 its last check, marked not followed, so the Followed chip has something to
 filter. It is not swept, so it drops out rather than going stale.
 
-It is in the Companies section, as `/earnings` is: Companies is marked current,
-and it is linked from the mobile drawer and both footers. `held` comes from
-`/assets`, best effort.
+It has its own tab (Insiders, after Earnings) since 2026-10-08, and is linked
+from the mobile drawer and both footers. `held` comes from `/assets`, best
+effort.
 
 Tests: `tests/test_insiders.py` (65, on 26 real Form 4s fetched from the box,
 in `tests/fixtures/insiders/`, with each filing's listing row in `index.json`)
@@ -3089,8 +3107,8 @@ sub-industry names are `gics.SUB_INDUSTRY_ZH`, all 163, carried in the payload
 (sectors and groups use the existing `gics.<code>` strings). The pure parts of
 the page are `static/sector_map.js`.
 
-In the header it is Markets' page (the row is full at 13 links), linked from
-/markets' rotation map, the phone menu and both footers. Tests:
+It has its own tab (Sectors, after Markets) since 2026-10-08, and is linked
+from /markets' rotation map, the phone menu and both footers. Tests:
 `tests/test_sector_map.py` (40: the hand-checkable arithmetic, date-gating,
 cliffs, the cache, the breadth hook, `next_build_at` across DST, the page's
 strings and links), `tests/test_gics.py`, `node tests/check_sector_map_js.mjs`
@@ -3157,8 +3175,9 @@ company outside the sweep says so rather than "none"); and House trades with
 owner, range, lag and a link to the PTR.
 
 /api/smart-money is recomputed when one of the three caches moves, else at most
-every 10 minutes (~440 KB, ~60 KB gzipped on real data). The page is 13F's in
-the header and is linked from /13f, /insiders, the phone menu and both footers.
+every 10 minutes (~440 KB, ~60 KB gzipped on real data). The page has its own
+tab (Smart money, after 13F) since 2026-10-08, and is linked from /13f,
+/insiders, the phone menu and both footers.
 Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (18) and
 `tests/check_sectors_money_endpoints.py` (15, hermetic).
 

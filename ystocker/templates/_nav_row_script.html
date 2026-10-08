@@ -1,0 +1,56 @@
+{#  The behaviour of a row of page links that scrolls sideways when it does not
+    fit: trade-agents.com's Markets bar (_ta_markets_bar.html) and the yStocker
+    header's tabs (base.html). Included right after the row, so it runs before
+    the page below has loaded and the row never paints scrolled to the wrong
+    place. One copy for both: tests/check_markets_bar_row.mjs reads it here. #}
+<script>
+(function () {
+  // When the links do not fit -- on a phone, or a window narrower than the
+  // row -- they scroll sideways. The row opens with the page's own link in
+  // the middle of it: at 390px it shows about a third of its links, so
+  // Housing or Videos opened on Markets, Valuation and DCA and the bar said
+  // nothing about where the reader was. Instant rather than smooth, since
+  // this is where the row starts, not a movement; and redone until the reader
+  // scrolls it, because i18n.js swaps the labels at DOMContentLoaded and the
+  // web font lands later, and each moves the link. The fade is kept to the
+  // sides that have more to see (data-fade).
+  const row = document.querySelector('[data-nav-row]');
+  if (!row) return;
+  let moved = false;
+  const fade = () => {
+    const end = row.scrollWidth - row.clientWidth;
+    const left = row.scrollLeft > 1, right = row.scrollLeft < end - 1;
+    const v = left && right ? 'both' : left ? 'left' : right ? 'right' : 'none';
+    if (row.dataset.fade !== v) row.dataset.fade = v;
+  };
+  const place = () => {
+    // The first current link with a box: a link a breakpoint hides must not be
+    // scrolled to.
+    const here = [...row.querySelectorAll('[aria-current="page"]')].find(el => el.offsetWidth);
+    if (here && !moved && row.scrollWidth > row.clientWidth) {
+      const a = here.getBoundingClientRect(), b = row.getBoundingClientRect();
+      row.scrollLeft += (a.left + a.width / 2) - (b.left + b.width / 2);
+    }
+    fade();
+  };
+  place();
+  ['touchstart', 'pointerdown', 'wheel'].forEach(t =>
+    row.addEventListener(t, () => { moved = true; }, { passive: true }));
+  // A mouse wheel only turns up and down, so over a row with more to see it
+  // moves the row; a trackpad's sideways swipe already does. At either end the
+  // page scrolls as usual.
+  row.addEventListener('wheel', e => {
+    if (!e || e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+    const step = e.deltaMode === 1 ? e.deltaY * 18 : e.deltaMode === 2 ? e.deltaY * row.clientWidth : e.deltaY;
+    const before = row.scrollLeft;
+    row.scrollLeft = before + step;
+    if (row.scrollLeft !== before) e.preventDefault();
+  }, { passive: false });
+  row.addEventListener('scroll', fade, { passive: true });
+  document.addEventListener('DOMContentLoaded', place);
+  document.addEventListener('i18n:langchange', () => { moved = false; place(); });
+  if (document.fonts) document.fonts.ready.then(place);
+  if (window.ResizeObserver) new ResizeObserver(place).observe(row);
+  else window.addEventListener('resize', place);
+})();
+</script>

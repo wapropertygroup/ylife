@@ -143,15 +143,15 @@ class SectorsEndpoints(_Base):
         resp = self.client.get("/api/sectors", headers={"User-Agent": "meta-externalagent/1.1"})
         self.assertEqual(resp.status_code, 403)
 
-    def test_the_page_marks_markets_on_both_hosts(self):
+    def test_the_page_marks_its_own_tab_on_both_hosts(self):
         html = self.client.get("/sectors").get_data(as_text=True)
         self.assertIn('id="smChart"', html)
         self.assertIn("sector_map.js", html)
         nav = re.search(r'<nav data-nav="desktop".*?</nav>', html, re.S).group(0)
-        self.assertEqual(re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav), ["/markets"])
+        self.assertEqual(re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav), ["/sectors"])
         ta = self.client.get("/sectors", base_url=TA).get_data(as_text=True)
         bar = re.search(r'<nav class="w-sub".*?</nav>', ta, re.S).group(0)
-        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/markets"])
+        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/sectors"])
 
     def test_markets_links_to_it(self):
         self.assertIn('href="/sectors"', self.client.get("/markets").get_data(as_text=True))
@@ -213,14 +213,14 @@ class SmartMoneyEndpoints(_Base):
         with p1, p2, p3:
             self.assertEqual(self.client.get("/api/smart-money/%3Cscript%3E").status_code, 400)
 
-    def test_the_page_marks_13f_on_both_hosts(self):
+    def test_the_page_marks_its_own_tab_on_both_hosts(self):
         html = self.client.get("/smart-money").get_data(as_text=True)
         self.assertIn('id="moRows"', html)
         nav = re.search(r'<nav data-nav="desktop".*?</nav>', html, re.S).group(0)
-        self.assertEqual(re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav), ["/13f"])
+        self.assertEqual(re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav), ["/smart-money"])
         ta = self.client.get("/smart-money", base_url=TA).get_data(as_text=True)
         bar = re.search(r'<nav class="w-sub".*?</nav>', ta, re.S).group(0)
-        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/13f"])
+        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/smart-money"])
 
     def test_13f_and_insiders_link_to_it(self):
         with mock.patch.object(sec13f, "get_all_holdings", return_value={}):

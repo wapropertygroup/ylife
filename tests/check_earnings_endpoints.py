@@ -18,8 +18,8 @@ What it pins:
   store that cannot be read costs the highlight, not the page;
 * a week far outside the calendar's range is clamped and says so, and a
   malformed ``?week=`` is a 400;
-* the page carries its controls, marks Companies as the current section, and
-  every string it composes exists in both languages.
+* the page carries its controls, marks its own tab as current, and every
+  string it composes exists in both languages.
 
 Run:  venv/bin/python -m tests.check_earnings_endpoints
 """
@@ -191,14 +191,14 @@ class EarningsEndpoints(unittest.TestCase):
         self.assertIsNone(body["week"]["prev"])
         self.assertEqual(self.client.get("/api/earnings?week=next-tuesday").status_code, 400)
 
-    def test_the_page_carries_its_controls_and_marks_companies(self):
+    def test_the_page_carries_its_controls_and_marks_its_tab(self):
         html = self.client.get("/earnings").get_data(as_text=True)
         for needle in ('id="ecDays"', 'id="ecPrev"', 'id="ecNext"', 'data-ec-cap="2e9"',
                        'id="ecFollowed"', 'id="ecHeld"', "/api/earnings"):
             self.assertIn(needle, html, needle)
         nav = re.search(r'<nav data-nav="desktop".*?</nav>', html, re.S).group(0)
         current = re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav)
-        self.assertEqual(current, ["/companies"])
+        self.assertEqual(current, ["/earnings"])
 
     def test_every_composed_string_exists_in_both_languages(self):
         tpl = (ROOT / "ystocker/templates/earnings.html").read_text()

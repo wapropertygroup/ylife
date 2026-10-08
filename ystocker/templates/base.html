@@ -484,15 +484,17 @@
     body { font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB',
                         'Microsoft YaHei', 'Noto Sans SC', sans-serif; }
     .app-container { max-width: 1475px; }
-    /* Where the header trades its full bar for the hamburger. The bar does not
-       shrink (logo, thirteen links, the right-hand controls, none of them
-       wrappable). Measured with the flat row that replaced the Sectors and
-       Macro menus (2026-10-03): 1301px signed out in English (1127 in
-       Chinese); signed in, where Share's icon and the account chip join it,
-       1336px with a short name and ~1410 with one the chip's 8rem cap
-       truncates. It used to switch on at md (768px), so from there up to that
-       width every page on the site scrolled sideways: by 446px on an iPad
-       held upright.
+    /* Where the header trades its full bar for the hamburger. Measured with
+       the flat row that replaced the Sectors and Macro menus (2026-10-03), when
+       the bar could not shrink: thirteen links fitted beside the logo and the
+       right-hand controls at 1301px signed out in English (1127 in Chinese);
+       signed in, where Share's icon and the account chip join it, 1336px with
+       a short name and ~1410 with one the chip's 8rem cap truncates. Since
+       2026-10-08 the row holds seventeen and scrolls sideways when it runs out
+       of room (header [data-nav-row], below), so these are where enough of it
+       shows to be worth the space; the drawer lists every page. It used to
+       switch on at md (768px), so from there up to that width every page on
+       the site scrolled sideways: by 446px on an iPad held upright.
        The header carries its own switch point, set by the server from the
        sign-in state, since only the server knows which bar it is drawing. This
        is written here rather than as xl: utilities because the compiled bundle
@@ -507,6 +509,28 @@
       header[data-nav-fit="1420"] [data-nav="desktop"] { display: none; }
       header[data-nav-fit="1420"] [data-nav="burger"],
       header[data-nav-fit="1420"] [data-nav="drawer"] { display: block; }
+    }
+    /* The tabs. Seventeen do not fit the 1475px header at any width, so the row
+       scrolls sideways, fading on the side with more to see; where it opens
+       and data-fade come from _nav_row_script.html, as on trade-agents.com's
+       Markets bar (wiki.css .w-sub-links). The block padding keeps a focus
+       ring from being clipped by the scrolling box. */
+    header [data-nav-row] {
+      min-width: 0; padding-block: 3px;
+      overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+    }
+    header [data-nav-row]::-webkit-scrollbar { display: none; }
+    header [data-nav-row][data-fade="right"] {
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+              mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent);
+    }
+    header [data-nav-row][data-fade="left"] {
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px);
+              mask-image: linear-gradient(90deg, transparent, #000 32px);
+    }
+    header [data-nav-row][data-fade="both"] {
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+              mask-image: linear-gradient(90deg, transparent, #000 32px, #000 calc(100% - 32px), transparent);
     }
     .chart-container { position: relative; }
     /* Custom scrollbar */
@@ -572,21 +596,29 @@
       </a>
 
       <!-- Desktop nav -->
-      {#  One row of plain links, nothing behind a menu. Sectors went: its 26
-          peer groups are listed on Valuation, which is where a sector page now
-          counts as being. Macro's five pages sit in the bar itself, under
-          short labels with the full name as the tooltip. Thirteen links at
-          px-2/gap-0.5 cost about what nine did at px-3/gap-1 plus two menu
-          buttons; the bar's switch point (data-nav-fit, and the CSS above) is
-          measured against this row. The page's own link is marked. #}
+      {#  One row of plain links, nothing behind a menu. The Sectors menu went:
+          its 26 peer groups are listed on Valuation, which is where a peer
+          group's page counts as being. Macro's five pages sit in the bar
+          itself, under short labels with the full name as the tooltip, and so,
+          since 2026-10-08, do the sector map, earnings, insiders and smart
+          money, each beside the page it used to count as part of. Seventeen
+          links no longer fit the header at any width, so the row scrolls
+          sideways when it runs out of room, opens on the page's own link, which
+          is marked, and turns with a mouse wheel (_nav_row_script.html, the
+          Markets bar's script). This list and _ta_markets_bar.html's are the
+          same seventeen in the same order (tests/test_nav_tabs.py). #}
       {% set _ep = request.endpoint %}
       {% set _nav = [
-        ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets', 'main.sectors_page')),
-        ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
-        ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
-        ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page', 'main.insiders_page')),
-        ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
-        ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf', 'main.smart_money_page')),
+        ('main.markets',          'markets.nav',        'Markets',     '',                     '',                   ('main.markets',)),
+        ('main.sectors_page',     'nav.sectors_short',  'Sectors',     'nav.sectors',          'Sector map',         ('main.sectors_page',)),
+        ('main.evaluation',       'nav.home',           'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
+        ('main.dca_index',        'nav.dca',            'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
+        ('main.companies',        'nav.companies',      'Companies',   '',                     '',                   ('main.companies',)),
+        ('main.earnings_page',    'nav.earnings_short', 'Earnings',    'nav.earnings',         'Earnings calendar',  ('main.earnings_page',)),
+        ('main.insiders_page',    'nav.insiders_short', 'Insiders',    'nav.insiders',         'Insider trades',     ('main.insiders_page',)),
+        ('main.commodities',      'nav.commodities',    'Commodities', '',                     '',                   ('main.commodities',)),
+        ('main.thirteenf',        'nav.thirteenf',      '13F',         '',                     '',                   ('main.thirteenf',)),
+        ('main.smart_money_page', 'nav.smart_money',    'Smart money', '',                     '',                   ('main.smart_money_page',)),
         ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
         ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
         ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),
@@ -595,7 +627,7 @@
         ('main.daily_report',     'nav.daily',       'Daily',       '',                     '',                   ('main.daily_report',)),
         ('main.videos',           'nav.videos',      'Videos',      '',                     '',                   ('main.videos',)),
       ] %}
-      <nav data-nav="desktop" class="hidden md:flex items-center gap-0.5 ml-2 flex-1">
+      <nav data-nav="desktop" data-nav-row class="hidden md:flex items-center gap-0.5 ml-2 flex-1">
         {% for ep, key, label, tip_key, tip, here in _nav %}
         <a href="{{ url_for(ep) }}"
            class="px-2 py-1.5 rounded-md text-sm whitespace-nowrap transition {{ 'text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800' if _ep in here else 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800' }}"
@@ -609,9 +641,10 @@
            which is exactly what somebody who has not signed in yet is reading
            it for. #}
       </nav>
+      {% include "_nav_row_script.html" %}
 
       <!-- Refresh button + Language toggle -->
-      <div data-nav="desktop" class="relative ml-auto hidden md:flex items-center gap-2">
+      <div data-nav="desktop" class="relative ml-auto hidden md:flex items-center gap-2 shrink-0">
         {#
           Ticker search. This was a bare link to /lookup, which meant a full
           page load before you could type a single character. The box now opens

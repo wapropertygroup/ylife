@@ -15,18 +15,25 @@
     any [data-navsearch] mount, and the refresh cooldown finds #refreshBtn,
     #refreshWrap and #refreshTooltipBody by id. Every link is a plain link:
     the Sectors menu went (its peer groups are listed on Valuation, which marks
-    itself current on a sector page) and Macro's five pages sit in the row. With
-    no menu left to clip, the row scrolls sideways at any width it does not fit
-    (wiki.css), and opens scrolled to the page's own link, which on the pages
-    at its far end was otherwise out of sight. #}
+    itself current on a sector page) and Macro's five pages sit in the row. So,
+    since 2026-10-08, do Sectors, Earnings, Insiders and Smart money, each
+    beside the page it used to count as part of; this list and base.html's
+    _nav are the same seventeen in the same order (tests/test_nav_tabs.py).
+    With no menu left to clip, the row scrolls sideways at any width it does
+    not fit (wiki.css), and opens scrolled to the page's own link, which on the
+    pages at its far end was otherwise out of sight (_nav_row_script.html). #}
 {% set _ep = request.endpoint %}
 {% set _links = [
-  ('main.markets',          'markets.nav',     'Markets',     '',                     '',                   ('main.markets', 'main.sectors_page')),
-  ('main.evaluation',       'nav.home',        'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
-  ('main.dca_index',        'nav.dca',         'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
-  ('main.companies',        'nav.companies',   'Companies',   '',                     '',                   ('main.companies', 'main.earnings_page', 'main.insiders_page')),
-  ('main.commodities',      'nav.commodities', 'Commodities', '',                     '',                   ('main.commodities',)),
-  ('main.thirteenf',        'nav.thirteenf',   '13F',         '',                     '',                   ('main.thirteenf', 'main.smart_money_page')),
+  ('main.markets',          'markets.nav',        'Markets',     '',                     '',                   ('main.markets',)),
+  ('main.sectors_page',     'nav.sectors_short',  'Sectors',     'nav.sectors',          'Sector map',         ('main.sectors_page',)),
+  ('main.evaluation',       'nav.home',           'Valuation',   '',                     '',                   ('main.evaluation', 'main.sector')),
+  ('main.dca_index',        'nav.dca',            'DCA',         '',                     '',                   ('main.dca_index', 'main.dca_page')),
+  ('main.companies',        'nav.companies',      'Companies',   '',                     '',                   ('main.companies',)),
+  ('main.earnings_page',    'nav.earnings_short', 'Earnings',    'nav.earnings',         'Earnings calendar',  ('main.earnings_page',)),
+  ('main.insiders_page',    'nav.insiders_short', 'Insiders',    'nav.insiders',         'Insider trades',     ('main.insiders_page',)),
+  ('main.commodities',      'nav.commodities',    'Commodities', '',                     '',                   ('main.commodities',)),
+  ('main.thirteenf',        'nav.thirteenf',      '13F',         '',                     '',                   ('main.thirteenf',)),
+  ('main.smart_money_page', 'nav.smart_money',    'Smart money', '',                     '',                   ('main.smart_money_page',)),
   ('main.fed',              'nav.fed',         'Fed',         'nav.fed_long',         'Fed Balance Sheet',  ('main.fed',)),
   ('main.fedwatch',         'nav.fedwatch',    'Rates',       'nav.fedwatch_long',    'Interest Rates',     ('main.fedwatch',)),
   ('main.housing',          'nav.housing',     'Housing',     'nav.housing_long',     'Housing Market',     ('main.housing',)),
@@ -37,7 +44,7 @@
 ] %}
 <nav class="w-sub" aria-label="Markets" data-w-sub>
   <div class="w-sub-inner">
-    <div class="w-sub-links" data-w-sub-row>
+    <div class="w-sub-links" data-nav-row>
       {% for ep, key, label, tip_key, tip, here in _links %}
       <a class="w-sub-link{% if _ep in here %} is-current{% endif %}" href="{{ url_for(ep) }}"
          {%- if _ep in here %} aria-current="page"{% endif %}
@@ -83,44 +90,4 @@
     </div>
   </div>
 </nav>
-<script>
-(function () {
-  // When the links do not fit -- on a phone, or a window narrower than the
-  // row -- they scroll sideways (wiki.css). The row opens with the page's
-  // own link in the middle of it: at 390px it shows about a third of
-  // its links, so Housing or Videos opened on Markets, Valuation and DCA and
-  // the bar said nothing about where the reader was. Instant rather than
-  // smooth, since this is where the row starts, not a movement; and redone
-  // until the reader scrolls it, because i18n.js swaps the labels at
-  // DOMContentLoaded and the web font lands later, and each moves the link.
-  // The fade is kept to the sides that have more to see (data-fade).
-  const row = document.querySelector('[data-w-sub-row]');
-  if (!row) return;
-  let moved = false;
-  const fade = () => {
-    const end = row.scrollWidth - row.clientWidth;
-    const left = row.scrollLeft > 1, right = row.scrollLeft < end - 1;
-    const v = left && right ? 'both' : left ? 'left' : right ? 'right' : 'none';
-    if (row.dataset.fade !== v) row.dataset.fade = v;
-  };
-  const place = () => {
-    // The first current link with a box. Nothing is marked twice now that the
-    // menus are gone, but a link a breakpoint hides must not be scrolled to.
-    const here = [...row.querySelectorAll('.is-current')].find(el => el.offsetWidth);
-    if (here && !moved && row.scrollWidth > row.clientWidth) {
-      const a = here.getBoundingClientRect(), b = row.getBoundingClientRect();
-      row.scrollLeft += (a.left + a.width / 2) - (b.left + b.width / 2);
-    }
-    fade();
-  };
-  place();
-  ['touchstart', 'pointerdown', 'wheel'].forEach(t =>
-    row.addEventListener(t, () => { moved = true; }, { passive: true }));
-  row.addEventListener('scroll', fade, { passive: true });
-  document.addEventListener('DOMContentLoaded', place);
-  document.addEventListener('i18n:langchange', () => { moved = false; place(); });
-  if (document.fonts) document.fonts.ready.then(place);
-  if (window.ResizeObserver) new ResizeObserver(place).observe(row);
-  else window.addEventListener('resize', place);
-})();
-</script>
+{% include "_nav_row_script.html" %}

@@ -24,8 +24,8 @@ What it pins:
   never queue anything; a recent failure and a spent allowance are 503s;
   a stale company outside the followed set is refreshed on view, and a
   followed one is left to the sweep;
-* the page carries its controls, marks Companies as the current section on
-  both hosts, and every string it composes exists in both languages.
+* the page carries its controls, marks its own tab as current on both hosts,
+  and every string it composes exists in both languages.
 
 Run:  venv/bin/python -m tests.check_insiders_endpoints
 """
@@ -300,13 +300,13 @@ class InsidersEndpoints(unittest.TestCase):
             self.assertIn(needle, html, needle)
         nav = re.search(r'<nav data-nav="desktop".*?</nav>', html, re.S).group(0)
         current = re.findall(r'href="([^"]+)"[^>]*aria-current="page"', nav)
-        self.assertEqual(current, ["/companies"])
+        self.assertEqual(current, ["/insiders"])
         self.assertGreaterEqual(html.count('href="/insiders"'), 2)       # the drawer and the footer
 
-    def test_on_trade_agents_com_the_markets_bar_marks_companies(self):
+    def test_on_trade_agents_com_the_markets_bar_marks_its_tab(self):
         html = self.client.get("/insiders", base_url=TA).get_data(as_text=True)
         bar = re.search(r'<nav class="w-sub".*?</nav>', html, re.S).group(0)
-        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/companies"])
+        self.assertEqual(re.findall(r'is-current" href="([^"]+)"', bar), ["/insiders"])
         footer = re.search(r'<footer class="w-footer">.*?</footer>', html, re.S).group(0)
         self.assertIn('href="/insiders"', footer)
 
