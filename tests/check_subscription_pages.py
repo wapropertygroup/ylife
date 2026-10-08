@@ -332,7 +332,12 @@ class SubscriptionPages(unittest.TestCase):
                 self.assertIn('id="agTierNote" class="ag-tier-note" hidden>', page)
         # Free runs left, credits banked: the credit is not what pays next.
         with mock.patch.object(quota, "usage", return_value=self._usage(credits=5)):
-            self.assertTrue(self._rows(self._page("/agents", base=LI))["google-pro"])
+            page = self._page("/agents", base=LI)
+            self.assertTrue(self._rows(page)["google-pro-flash"])
+        # Four rows since 2026-10-07, and no thinking control beside them.
+        self.assertEqual(set(self._rows(page)),
+                         {"deepseek-flash", "google-pro-flash", "google-flash", "deepseek-pro"})
+        self.assertNotIn('id="agThinkSel"', page)
 
     def _run(self, model, info):
         refund = mock.MagicMock()
@@ -352,6 +357,7 @@ class SubscriptionPages(unittest.TestCase):
         return r, refund
 
     def test_a_free_run_asking_for_a_paid_model_is_refused_and_refunded(self):
+        # google-pro is retired: it is its successor, still a paid row.
         r, refund = self._run("google-pro", {"paid": False})
         self.assertEqual(r.status_code, 403)
         body = r.get_json()

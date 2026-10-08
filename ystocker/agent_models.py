@@ -43,6 +43,23 @@ Providers with no thinking knob at all get an empty set. Only ``google``,
 for everything else the parameter is inert, so offering the control would be a
 lie about what the run does.
 
+Why four rows, and no thinking control on the page (2026-10-07)
+-----------------------------------------------------------------
+Asked for: "simplify the TradeAgents choices". There were eight rows and a
+thinking menu beside them. Four remain, one per thing a reader picks for: free
+(DeepSeek V4 Flash), the best report (Gemini 3.1 Pro deciding, 3.8 Flash
+researching), speed for many tickers (3.8 Flash throughout) and the lowest cost
+of a paid run (DeepSeek V4 Pro deciding, V4 Flash researching). Pro in every seat
+was dropped because the analysts' many tool calls gain little from it and cost
+the most; the Flash Lite tiers and V4 Pro in every seat added rows without a
+reason to pick them. A retired key resolves to its nearest kept row
+(:data:`RETIRED`), never to the deployment default, which is the most expensive
+configuration there is.
+
+Each row runs at its own ``thinking_default`` (high on both Gemini rows), so the
+page offers no thinking menu. :func:`resolve` still clamps a level a client sends,
+so an old tab or a script cannot reach the vendor with one the model refuses.
+
 Why the deep and quick roles are named separately per choice
 ------------------------------------------------------------
 ``quick_think_llm`` backs all seven analysts plus the researchers, trader and
@@ -69,12 +86,11 @@ PROVIDER_KEY_ENV: dict[str, tuple[str, ...]] = {
     "deepseek": ("DEEPSEEK_API_KEY",),
 }
 
-# Thinking levels, cheapest first. Display order in the UI, and the order a
-# reader reads them as a scale -- so this list is presentation, while the per
-# choice ``thinking`` tuple below is the authority on what is *accepted*.
+# Thinking levels, cheapest first: the order a reader reads them as a scale
+# wherever a run's level is shown. Presentation only; the per choice
+# ``thinking`` tuple below is the authority on what is *accepted*.
 THINKING_ORDER = ("minimal", "low", "medium", "high")
 
-_GOOGLE_THINKING = ("minimal", "low", "medium", "high")
 # Pro's and Flash 3.8's real range. "minimal" is absent because the API refuses it
 # (400) and google_client silently rewrites it to "low" -- offering a control
 # whose value is quietly changed is worse than not offering it.
@@ -115,32 +131,24 @@ CHOICES: dict[str, dict[str, Any]] = {
         "label": "DeepSeek V4 Flash — free",
         "label_key": "agents.model_deepseek_flash",
     },
-    # ── Gemini ────────────────────────────────────────────────────────────
-    "google-pro": {
-        "provider": "google",
-        "deep": "gemini-3.1-pro-preview",
-        "quick": "gemini-3.1-pro-preview",
-        "thinking": _PRO_THINKING,
-        "thinking_default": "high",
-        "name": "Gemini 3.1 Pro",
-        "label": "Gemini 3.1 Pro — highest quality",
-        "label_key": "agents.model_google_pro",
-    },
+    # ── Paid ──────────────────────────────────────────────────────────────
     "google-pro-flash": {
         # Pro rules, Flash researches: the two rulings on the strongest model,
-        # the analysts' many tool calls on the newest Flash.
+        # the analysts' many tool calls on the newest Flash. The best report
+        # this table offers, and the deployment default (agents.py).
         "provider": "google",
         "deep": "gemini-3.1-pro-preview",
         "quick": "gemini-3.8-flash",
         "thinking": _PRO_THINKING,
         "thinking_default": "high",
         "name": "Gemini 3.1 Pro + 3.8 Flash",
-        "label": "Gemini 3.1 Pro + 3.8 Flash — balanced",
+        "label": "Gemini 3.1 Pro + 3.8 Flash — best quality",
         "label_key": "agents.model_google_pro_flash",
     },
     "google-flash": {
         # 3.8 Flash since 2026-10-04 (was 3.5): the key names the tier, not the
-        # version, so a stored preference follows the newest Flash.
+        # version, so a stored preference follows the newest Flash. For many
+        # tickers at a time: fast, long context, cheap per run.
         "provider": "google",
         "deep": "gemini-3.8-flash",
         "quick": "gemini-3.8-flash",
@@ -150,60 +158,29 @@ CHOICES: dict[str, dict[str, Any]] = {
         "label": "Gemini 3.8 Flash — fast",
         "label_key": "agents.model_google_flash",
     },
-    "google-flash-lite": {
-        "provider": "google",
-        "deep": "gemini-3.8-flash",
-        "quick": "gemini-3.5-flash-lite",
-        "thinking": _FLASH38_THINKING,
-        "thinking_default": "low",
-        "name": "Gemini 3.8 Flash + 3.5 Flash Lite",
-        "label": "Gemini 3.8 Flash + 3.5 Flash Lite — economical",
-        "label_key": "agents.model_google_flash_lite",
-    },
-    "google-lite": {
-        # Flash decides, Lite fetches. Lite appears only in the catalog's
-        # "quick" list, and it is the analysts' many tool calls that make a run
-        # expensive -- putting Lite in the deep slot too would cheapen the one
-        # output the reader actually acts on to save the least of the spend.
-        "provider": "google",
-        "deep": "gemini-3.5-flash",
-        "quick": "gemini-3.1-flash-lite",
-        "thinking": _GOOGLE_THINKING,
-        # Low, not high: this tier is chosen for cost, and a high thinking level
-        # would spend back most of what the cheaper model saved.
-        "thinking_default": "low",
-        "name": "Gemini 3.5 Flash + 3.1 Flash Lite",
-        "label": "Gemini 3.5 Flash + 3.1 Flash Lite — cheapest",
-        "label_key": "agents.model_google_lite",
-    },
-    # ── DeepSeek ──────────────────────────────────────────────────────────
-    "deepseek-pro-max": {
-        # V4 Pro in every seat. The catalog lists it for the deep role only,
-        # so this was tried before it was offered (2026-10-04): a tool call
-        # and the turn after it through TradingAgents' own DeepSeek client,
-        # which echoes the reasoning back as the model requires.
-        "provider": "deepseek",
-        "deep": "deepseek-v4-pro",
-        "quick": "deepseek-v4-pro",
-        "thinking": (),
-        "thinking_default": "",
-        "name": "DeepSeek V4 Pro",
-        "label": "DeepSeek V4 Pro — every role",
-        "label_key": "agents.model_deepseek_pro_max",
-    },
     "deepseek-pro": {
         # v4-pro is deep-only in the catalog and v4-flash is the quick model, so
         # this pairing is the catalog's own division of labour rather than a
-        # judgement made here.
+        # judgement made here. The cheapest paid row.
         "provider": "deepseek",
         "deep": "deepseek-v4-pro",
         "quick": "deepseek-v4-flash",
         "thinking": (),
         "thinking_default": "",
         "name": "DeepSeek V4 Pro + V4 Flash",
-        "label": "DeepSeek V4 Pro + V4 Flash",
+        "label": "DeepSeek V4 Pro + V4 Flash — best value",
         "label_key": "agents.model_deepseek_pro",
     },
+}
+
+#: Rows retired on 2026-10-07, each to the kept row nearest it. A reader's stored
+#: preference or a stale tab may still send one; it runs on the successor rather
+#: than falling through to the deployment default.
+RETIRED: dict[str, str] = {
+    "google-pro": "google-pro-flash",          # Pro in every seat
+    "google-flash-lite": "google-flash",       # 3.8 Flash + 3.5 Flash Lite
+    "google-lite": "google-flash",             # 3.5 Flash + 3.1 Flash Lite
+    "deepseek-pro-max": "deepseek-pro",        # V4 Pro in every seat
 }
 
 
@@ -211,6 +188,7 @@ def free_choice() -> str:
     """The key a free run uses. Read per call so a changed AGENTS_FREE_MODEL
     needs only a restart; an unknown key is ignored, never the default."""
     key = os.environ.get("AGENTS_FREE_MODEL", "").strip()
+    key = RETIRED.get(key, key)
     return key if key in CHOICES else FREE_CHOICE_DEFAULT
 
 
@@ -251,14 +229,16 @@ def resolve(choice: str, thinking: str = "") -> Optional[dict[str, str]]:
     model's default, which is what keeps an unsupported level from reaching the
     vendor. For a provider with no thinking knob the result is always ``""``.
     """
-    spec = CHOICES.get((choice or "").strip())
+    key = (choice or "").strip()
+    key = RETIRED.get(key, key)
+    spec = CHOICES.get(key)
     if not spec:
         return None
     accepted = spec["thinking"]
     want = (thinking or "").strip().lower()
     level = want if want in accepted else spec["thinking_default"]
     return {
-        "model_choice": (choice or "").strip(),
+        "model_choice": key,
         "provider": spec["provider"],
         "deep_model": spec["deep"],
         "quick_model": spec["quick"],

@@ -104,11 +104,12 @@ DEFAULT_PROVIDER = os.environ.get("TRADINGAGENTS_LLM_PROVIDER", "google")
 # Ids taken from tradingagents/llm_clients/model_catalog.py, not invented: an
 # unknown model id fails deep inside the provider SDK.
 #
-# Pro on both roles, not just the deep one. quick_think handles tool calls and
-# summarisation, so Flash there is the usual cost/latency trade — running Pro
-# everywhere is deliberately the expensive, highest-quality setting.
+# Pro deciding, 3.8 Flash researching: agent_models' "google-pro-flash", the
+# picker's best-quality row. Until 2026-10-07 this was Pro on both roles, the
+# most expensive setting; the analysts' many tool calls gain little from Pro, and
+# a default no row names would have put a "server default" row back on the page.
 DEFAULT_DEEP_MODEL = os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM", "gemini-3.1-pro-preview")
-DEFAULT_QUICK_MODEL = os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM", "gemini-3.1-pro-preview")
+DEFAULT_QUICK_MODEL = os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM", "gemini-3.8-flash")
 
 # Gemini 3.x takes a string thinking_level; google_client.py shows Pro accepts
 # low/high (Flash also takes minimal/medium).
@@ -213,6 +214,9 @@ def choose_models(model: str = "", thinking: str = "",
     from ystocker import agent_models
 
     asked = (model or "").strip() if model_choice_enabled() else ""
+    # A retired row is its successor, so a stale tab's paid key is still refused
+    # on a free run rather than quietly run on the free model.
+    asked = agent_models.RETIRED.get(asked, asked)
     if not premium:
         if asked in agent_models.CHOICES and agent_models.tier(asked) != "free":
             return None, MODEL_NEEDS_PRO
@@ -599,6 +603,11 @@ try:
         ("hot_money_report", "hot_money"),
         ("lockup_report", "lockup"),
         ("trader_investment_plan", "trader"),
+        # TradingAgents 0.6.0 keeps one name per decision: the managers' rulings
+        # are only here, with no judge_decision in either debate (DEBATES below
+        # still reads it, for an older checkout).
+        ("investment_plan", "research_mgr"),
+        ("final_trade_decision", "portfolio"),
     ]
     DEBATES = [
         ("investment_debate_state", [("bull_history", "bull"),
@@ -699,7 +708,12 @@ try:
         import tempfile as _tf
         from tradingagents.reporting import write_report_tree
         with _tf.TemporaryDirectory() as td:
-            complete = write_report_tree(state, ticker, td)
+            try:
+                # 0.6.0 also renders an HTML copy by default. Only the markdown
+                # is read, and a failed HTML render would cost the whole report.
+                complete = write_report_tree(state, ticker, td, html=False)
+            except TypeError:
+                complete = write_report_tree(state, ticker, td)   # an older checkout
             if complete and os.path.exists(complete):
                 report = open(complete, encoding="utf-8").read()
     except Exception as _exc:
@@ -1213,7 +1227,7 @@ def _reap(job: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
             payload = json.loads(rp.read_text(encoding="utf-8"))
             if payload.get("ok"):
                 job.update(status="done", decision=payload.get("decision"),
-                           report=payload.get("report") or "")
+                           report=normalise_report_header(payload.get("report") or ""))
                 _record_structured(job, payload)
             else:
                 job.update(status="error",
@@ -1967,6 +1981,37 @@ _PORTFOLIO_BLIND_ROLES = frozenset({
 # does not publish it by default. A Chinese report stamps itself 生成时间：.
 _PREAMBLE_KEEP = re.compile(r"^(#\s+\S|Generated:|生成时间[:：])")
 
+# TradingAgents 0.6.0 heads a report with bullets under its title: the analysis
+# date, the rating, when it was generated, and a note when the run could not
+# settle its memory log. The page, the mails and the PDF expect a title and a
+# bare stamp there, and show the date and the rating themselves.
+_HEADER_STAMP_RE = re.compile(r"^-\s+(Generated|生成时间)\s*([:：])\s*(.*)$")
+_HEADER_BULLET_RE = re.compile(r"^-\s+\S")
+
+
+def normalise_report_header(report: str) -> str:
+    """A run's report with TradingAgents 0.6.0's header reduced to a stamp.
+
+    Before the first ``## `` section, the stamp loses its bullet and the other
+    header bullets go. A report from an older checkout has none and is returned
+    as it came.
+    """
+    out: list[str] = []
+    in_header = True
+    for line in (report or "").split("\n"):
+        if in_header and line.startswith("## "):
+            in_header = False
+        if in_header:
+            m = _HEADER_STAMP_RE.match(line)
+            if m:
+                sep = m.group(2)
+                out.append(f"{m.group(1)}{sep}{'' if sep == '：' else ' '}{m.group(3)}")
+                continue
+            if _HEADER_BULLET_RE.match(line):
+                continue
+        out.append(line)
+    return "\n".join(out)
+
 # In the report's language, like the report itself -- the page and the PDF both
 # print it where the dropped turns would have begun.
 _WITHHELD_NOTE = {
@@ -2607,7 +2652,7 @@ def _run(job_id: str) -> None:
                 _try_salvage(job, str(payload.get("error", ""))[:120])
             else:
                 job.update(status="done", decision=payload.get("decision"),
-                           report=payload.get("report") or "")
+                           report=normalise_report_header(payload.get("report") or ""))
                 _record_structured(job, payload)
         job["finished_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         _write(job)
@@ -2760,6 +2805,9 @@ def environment_report() -> dict[str, Any]:
         # The row a free run is held to; every other row is locked for it.
         "model_free_choice": agent_models.free_choice(),
         "model_free_name": agent_models.free_choice_name(),
+        # Retired rows and their successors, so a reader's stored preference
+        # for one restores as the row that replaced it.
+        "model_retired": agent_models.RETIRED,
         "debate_rounds": DEFAULT_DEBATE_ROUNDS,
         "risk_rounds": DEFAULT_RISK_ROUNDS,
         # Only set when a deployment pinned one language for everybody. Normally

@@ -44,22 +44,22 @@ class ResolveTests(unittest.TestCase):
         self.assertIsNone(agent_models.resolve("gemini-3.1-pro-preview"))
 
     def test_known_choice_yields_catalog_ids(self):
-        got = agent_models.resolve("google-pro")
+        got = agent_models.resolve("google-pro-flash")
         self.assertEqual(got["provider"], "google")
         self.assertEqual(got["deep_model"], "gemini-3.1-pro-preview")
-        self.assertEqual(got["quick_model"], "gemini-3.1-pro-preview")
+        self.assertEqual(got["quick_model"], "gemini-3.8-flash")
         self.assertEqual(got["thinking"], "high")
-        self.assertEqual(got["model_choice"], "google-pro")
+        self.assertEqual(got["model_choice"], "google-pro-flash")
 
     def test_pro_takes_medium_now(self):
         """It used to 400; measured accepted on 2026-10-04."""
-        self.assertEqual(agent_models.resolve("google-pro", "medium")["thinking"],
+        self.assertEqual(agent_models.resolve("google-pro-flash", "medium")["thinking"],
                          "medium")
 
     def test_no_minimal_reaches_pro_or_flash_38(self):
         """The API refuses it (400) on Pro and on 3.8 Flash, so every choice
         with either model clamps it -- a pairing takes what both models take."""
-        for key in ("google-pro", "google-pro-flash", "google-flash", "google-flash-lite"):
+        for key in ("google-pro-flash", "google-flash"):
             with self.subTest(choice=key):
                 self.assertNotIn("minimal", agent_models.CHOICES[key]["thinking"])
                 self.assertNotEqual(agent_models.resolve(key, "minimal")["thinking"],
@@ -68,13 +68,33 @@ class ResolveTests(unittest.TestCase):
     def test_pro_honours_its_own_levels(self):
         for level in ("low", "medium", "high"):
             with self.subTest(level=level):
-                self.assertEqual(agent_models.resolve("google-pro", level)["thinking"], level)
+                self.assertEqual(agent_models.resolve("google-pro-flash", level)["thinking"], level)
 
-    def test_the_older_lite_pair_takes_all_four(self):
-        for level in ("minimal", "low", "medium", "high"):
-            with self.subTest(level=level):
-                self.assertEqual(
-                    agent_models.resolve("google-lite", level)["thinking"], level)
+    def test_a_retired_row_runs_as_its_successor(self):
+        """Retired 2026-10-07. A stored preference or a stale tab may still send
+        one; it runs on the row that replaced it, at a level that row takes,
+        never on the deployment default."""
+        got = agent_models.resolve("google-lite", "minimal")
+        self.assertEqual(got["model_choice"], "google-flash")
+        self.assertEqual((got["deep_model"], got["quick_model"]),
+                         ("gemini-3.8-flash", "gemini-3.8-flash"))
+        self.assertEqual(got["thinking"], "high")       # minimal: 3.8 Flash refuses it
+        self.assertEqual(agent_models.resolve("google-pro")["quick_model"], "gemini-3.8-flash")
+        self.assertEqual(agent_models.resolve("deepseek-pro-max")["model_choice"], "deepseek-pro")
+
+    def test_the_deployment_default_is_a_row(self):
+        """So the picker draws no "server default" row beside the four, and a
+        paid run that names nothing gets the best-quality row."""
+        if os.environ.get("TRADINGAGENTS_DEEP_THINK_LLM") or os.environ.get("TRADINGAGENTS_QUICK_THINK_LLM"):
+            self.skipTest("this shell pins the deployment's models")
+        self.assertEqual(agent_models.choice_for(agents.DEFAULT_PROVIDER, agents.DEFAULT_DEEP_MODEL,
+                                                 agents.DEFAULT_QUICK_MODEL), "google-pro-flash")
+
+    def test_every_retired_row_names_a_kept_one(self):
+        for old, new in agent_models.RETIRED.items():
+            with self.subTest(retired=old):
+                self.assertNotIn(old, agent_models.CHOICES)
+                self.assertIn(new, agent_models.CHOICES)
 
     def test_thinking_is_case_and_space_insensitive(self):
         self.assertEqual(agent_models.resolve("google-flash", " HIGH ")["thinking"],
@@ -104,7 +124,7 @@ class ResolveTests(unittest.TestCase):
         self.assertEqual(
             agent_models.resolve("google-flash", "ultra")["thinking"], "high")
         self.assertEqual(
-            agent_models.resolve("google-lite", "ultra")["thinking"], "low")
+            agent_models.resolve("google-pro-flash", "ultra")["thinking"], "high")
 
 
 class TableInvariantTests(unittest.TestCase):
@@ -213,10 +233,11 @@ class AvailabilityTests(unittest.TestCase):
     def test_options_public_reports_availability(self):
         os.environ["GEMINI_API_KEY"] = "x"
         by_key = {o["key"]: o for o in agent_models.options_public()}
-        self.assertTrue(by_key["google-pro"]["available"])
+        self.assertTrue(by_key["google-pro-flash"]["available"])
         self.assertFalse(by_key["deepseek-pro"]["available"])
-        # The client rebuilds the thinking control from this, so it has to travel.
-        self.assertEqual(by_key["google-pro"]["thinking"], ["low", "medium", "high"])
+        # What each row accepts travels with it, though the page offers no
+        # thinking control: resolve() clamps against the same set.
+        self.assertEqual(by_key["google-pro-flash"]["thinking"], ["low", "medium", "high"])
         self.assertEqual(by_key["deepseek-pro"]["thinking"], [])
 
 
@@ -313,10 +334,9 @@ class ChildEnvTests(unittest.TestCase):
     def test_per_job_choice_beats_an_inherited_pin(self):
         self._pin()
         env = agents._child_env("English",
-                                models=agent_models.resolve("google-lite", "low"))
-        self.assertEqual(env["TRADINGAGENTS_DEEP_THINK_LLM"], "gemini-3.5-flash")
-        self.assertEqual(env["TRADINGAGENTS_QUICK_THINK_LLM"],
-                         "gemini-3.1-flash-lite")
+                                models=agent_models.resolve("google-flash", "low"))
+        self.assertEqual(env["TRADINGAGENTS_DEEP_THINK_LLM"], "gemini-3.8-flash")
+        self.assertEqual(env["TRADINGAGENTS_QUICK_THINK_LLM"], "gemini-3.8-flash")
         self.assertEqual(env["TRADINGAGENTS_GOOGLE_THINKING_LEVEL"], "low")
 
     def test_provider_switch_beats_an_inherited_pin(self):
@@ -428,8 +448,10 @@ class TierTests(unittest.TestCase):
         """Not to the deployment default, which is the most expensive choice."""
         os.environ["AGENTS_FREE_MODEL"] = "google-pro-2030"
         self.assertEqual(agent_models.free_choice(), "deepseek-flash")
-        os.environ["AGENTS_FREE_MODEL"] = "google-lite"
-        self.assertEqual(agent_models.free_choice(), "google-lite")
+        os.environ["AGENTS_FREE_MODEL"] = "google-flash"
+        self.assertEqual(agent_models.free_choice(), "google-flash")
+        os.environ["AGENTS_FREE_MODEL"] = "google-lite"         # retired: its successor
+        self.assertEqual(agent_models.free_choice(), "google-flash")
         self.assertEqual(agent_models.tier("deepseek-flash"), "pro")
 
     def test_every_row_has_a_name(self):

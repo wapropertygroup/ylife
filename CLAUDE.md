@@ -1977,21 +1977,37 @@ the fork `tests/test_fundamentals_ev.py` and `tests/test_valuation_models.py`.
 
 ### Choosing the model and thinking depth (`agent_models.py`)
 
-The run form on `/agents` lets a reader pick which models write their report and
-how hard the model thinks. `agent_models.py` is a pure table of eight choices
-(2026-10-04), each naming a provider, a `deep_think_llm`, a `quick_think_llm`,
-the thinking levels it accepts and its default:
+The run form on `/agents` lets a reader pick which models write their report.
+`agent_models.py` is a pure table of four choices, each naming a provider, a
+`deep_think_llm`, a `quick_think_llm`, the thinking levels it accepts and its
+default:
 
-| Key | Plan | Deep | Quick |
-|---|---|---|---|
-| `deepseek-flash` | **Free** | deepseek-v4-flash | deepseek-v4-flash |
-| `google-pro` | Pro | gemini-3.1-pro-preview | gemini-3.1-pro-preview |
-| `google-pro-flash` | Pro | gemini-3.1-pro-preview | gemini-3.8-flash |
-| `google-flash` | Pro | gemini-3.8-flash (was 3.5) | gemini-3.8-flash |
-| `google-flash-lite` | Pro | gemini-3.8-flash | gemini-3.5-flash-lite |
-| `google-lite` | Pro | gemini-3.5-flash | gemini-3.1-flash-lite |
-| `deepseek-pro-max` | Pro | deepseek-v4-pro | deepseek-v4-pro |
-| `deepseek-pro` | Pro | deepseek-v4-pro | deepseek-v4-flash |
+| Key | Plan | Deep | Quick | Label |
+|---|---|---|---|---|
+| `deepseek-flash` | **Free** | deepseek-v4-flash | deepseek-v4-flash | free |
+| `google-pro-flash` | Pro | gemini-3.1-pro-preview | gemini-3.8-flash | best quality |
+| `google-flash` | Pro | gemini-3.8-flash | gemini-3.8-flash | fast |
+| `deepseek-pro` | Pro | deepseek-v4-pro | deepseek-v4-flash | best value |
+
+**Four rows and no thinking control since 2026-10-07** (asked for: "simplify the
+TradeAgents choices"). There were eight rows and a thinking menu. The four kept
+are one per reason to pick: free, the best report (Pro deciding, 3.8 Flash
+researching), speed for many tickers, and the cheapest paid run. Pro in every
+seat, the two Flash Lite pairings and V4 Pro in every seat were retired.
+- **No thinking menu.** Each row runs at its own `thinking_default`: high on
+  both Gemini rows, none for DeepSeek, which has no such parameter. The run POST
+  sends no level; `resolve()` still clamps one a client sends.
+- **Retired keys** (`agent_models.RETIRED`) resolve to the nearest kept row:
+  google-pro → google-pro-flash, google-flash-lite and google-lite →
+  google-flash, deepseek-pro-max → deepseek-pro. That covers a stored browser
+  preference (the page restores through the same map), a stale tab, and
+  `AGENTS_FREE_MODEL`. A retired paid key on a free run is still refused, as
+  its successor would be.
+- **The deployment default is `google-pro-flash`.** `agents.DEFAULT_QUICK_MODEL`
+  went from gemini-3.1-pro-preview to gemini-3.8-flash. Pro on both roles, the
+  old default, matched no remaining row, so the page would have drawn a
+  "server default" row offering the most expensive setup again. A box whose
+  unit pins `TRADINGAGENTS_QUICK_THINK_LLM` still gets that row.
 
 Every model id is in `tradingagents/llm_clients/model_catalog.py` (or its
 `LEGACY_MODELS`), and every one was checked against the vendor's own model list
@@ -2117,7 +2133,7 @@ SSM (already set, and IAM's `parameter/ystocker/*` needed no change); without it
 `agent_models.provider_available()` reports it unavailable and the rows are
 disabled rather than offering a run that would die on a missing key.
 
-Tests: `tests/test_agent_models.py` (52, no app/network/subprocess), including a
+Tests: `tests/test_agent_models.py` (54, no app/network/subprocess), including a
 cross-check that every offered id appears in TradingAgents' own catalog file and
 the free/paid rule in `choose_models`, and `tests/check_subscription_pages.py`
 (the rows drawn locked or open by plan, and the route refusing and refunding a
@@ -2254,7 +2270,7 @@ byte for byte. Three things to know before touching it:
   recognise.
 
 Tests: the fork's `tests/test_report_language.py` (78, no network or LLM), and
-here `tests/test_report_pdf_preamble.py` (3) and the Chinese case in
+here `tests/test_report_pdf_preamble.py` (6) and the Chinese case in
 `tests/test_agents_portfolio_context.py`.
 
 ### The progress bar on a running report (`/agents`)
@@ -2299,7 +2315,7 @@ The page counts events by `seq` as a set, not by a high-water mark, so two polls
 answering out of order cannot drop a turn or count one twice.
 
 Tests: `node tests/check_agent_progress.mjs` (25, a whole run event by event,
-naming the speaker at each step) and `tests/test_agents_progress.py` (8,
+naming the speaker at each step) and `tests/test_agents_progress.py` (10,
 including that every planned role is one the runner actually publishes, since a
 name the events never carry leaves the bar at zero for the whole run).
 

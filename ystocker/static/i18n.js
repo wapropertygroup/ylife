@@ -2736,19 +2736,12 @@ const I18n = (() => {
     // step or a language toggle changes the wording of a row that never moved.
     'agents.model_label':  { en: 'Model',         zh: '模型' },
     'agents.model_server_default': { en: 'Server default', zh: '服务器默认' },
-    'agents.model_google_pro':   { en: 'Gemini 3.1 Pro — highest quality',
-                                   zh: 'Gemini 3.1 Pro — 质量最高' },
-    'agents.model_google_pro_flash': { en: 'Gemini 3.1 Pro + 3.8 Flash — balanced',
-                                       zh: 'Gemini 3.1 Pro + 3.8 Flash — 均衡' },
+    'agents.model_google_pro_flash': { en: 'Gemini 3.1 Pro + 3.8 Flash — best quality',
+                                       zh: 'Gemini 3.1 Pro + 3.8 Flash — 质量最佳' },
     'agents.model_google_flash': { en: 'Gemini 3.8 Flash — fast',
                                    zh: 'Gemini 3.8 Flash — 快速' },
-    'agents.model_google_flash_lite': { en: 'Gemini 3.8 Flash + 3.5 Flash Lite — economical',
-                                        zh: 'Gemini 3.8 Flash + 3.5 Flash Lite — 经济' },
-    'agents.model_google_lite':  { en: 'Gemini 3.5 Flash + 3.1 Flash Lite — cheapest',
-                                   zh: 'Gemini 3.5 Flash + 3.1 Flash Lite — 最省' },
-    'agents.model_deepseek_pro_max': { en: 'DeepSeek V4 Pro — every role',
-                                       zh: 'DeepSeek V4 Pro — 全程' },
-    'agents.model_deepseek_pro':   { en: 'DeepSeek V4 Pro + V4 Flash', zh: 'DeepSeek V4 Pro + V4 Flash' },
+    'agents.model_deepseek_pro':   { en: 'DeepSeek V4 Pro + V4 Flash — best value',
+                                     zh: 'DeepSeek V4 Pro + V4 Flash — 性价比最高' },
     'agents.model_deepseek_flash': { en: 'DeepSeek V4 Flash — free',
                                      zh: 'DeepSeek V4 Flash — 免费' },
     // Free runs use one model; the rest are for paid runs (Pro, a trial, a VIP,
@@ -2771,22 +2764,18 @@ const I18n = (() => {
     // configured here, not silently fail to find it.
     'agents.model_unavailable':  { en: 'not configured', zh: '未配置' },
     // Labels the deep/quick roles when a *finished* job's frozen triple names
-    // two different models (google-lite) -- on the owner's job card, the
+    // two different models (google-pro-flash) -- on the owner's job card, the
     // showcase sample card, and mirrored in report_email._STR for the mail.
     // Collapsed to one bare id when the two roles share a model, so these two
     // words appear only when there is something to distinguish.
     'agents.model_deep':   { en: 'deep',  zh: '深度' },
     'agents.model_quick':  { en: 'quick', zh: '快速' },
-    'agents.thinking_label': { en: 'Thinking',     zh: '思考深度' },
-    // Depth of reasoning, not quantity of output. "最小" rather than "无" because
-    // minimal is not off.
+    // A finished job's thinking level, on its card. Depth of reasoning, not
+    // quantity of output. "最小" rather than "无" because minimal is not off.
     'agents.think_minimal': { en: 'Minimal',       zh: '最小' },
     'agents.think_low':     { en: 'Low',           zh: '低' },
     'agents.think_medium':  { en: 'Medium',        zh: '中' },
     'agents.think_high':    { en: 'High',          zh: '高' },
-    // Replaces the control entirely for a provider that has no such parameter,
-    // so the row is never an input that does nothing.
-    'agents.think_na':      { en: 'Not applicable', zh: '不适用' },
     'agents.lang_is':      { en: 'Report language', zh: '报告语言' },
     // The value, not a label: a run writes its report in whichever language the
     // page is being read in, so this line has to move with the toggle.

@@ -84,5 +84,21 @@ class RunPlanTests(unittest.TestCase):
         self.assertEqual(MODULE.run_plan(None)["analysts"][0], "market")
 
 
+class DecisionKeyTests(unittest.TestCase):
+    """TradingAgents 0.6.0 keeps one name per decision: the managers' rulings are
+    investment_plan and final_trade_decision, with no judge_decision in either
+    debate, so the runner must publish them from those keys too."""
+
+    def test_the_managers_are_published_from_their_own_keys(self):
+        self.assertIn('("investment_plan", "research_mgr")', MODULE._RUNNER)
+        self.assertIn('("final_trade_decision", "portfolio")', MODULE._RUNNER)
+
+    def test_the_report_is_asked_for_as_markdown_only(self):
+        # A failed HTML render would cost the whole report, and only the
+        # markdown is read; an older checkout without html= is retried.
+        self.assertIn("write_report_tree(state, ticker, td, html=False)", MODULE._RUNNER)
+        self.assertIn("except TypeError:", MODULE._RUNNER)
+
+
 if __name__ == "__main__":
     unittest.main()

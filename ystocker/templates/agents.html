@@ -1537,10 +1537,11 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
     {% endif %}
   </div>
   {% if agent_env.model_choice_enabled %}
-  {# Model + thinking. Two listboxes rather than <select>s, for the reason given
-     at the status filter below: the native option list is drawn by the OS and
-     cannot carry this page's palette. Both drive a hidden input, so the submit
-     handler reads a value exactly as it would from a <select>.
+  {# Model. A listbox rather than a <select>, for the reason given at the status
+     filter below: the native option list is drawn by the OS and cannot carry
+     this page's palette. It drives a hidden input, so the submit handler reads a
+     value exactly as it would from a <select>. There is no thinking control
+     since 2026-10-07: each row runs at its own level (agent_models).
 
      Every option's value is a *table key* from agent_models.CHOICES, never a
      model id — a model id the client made up would reach the child process and
@@ -1601,37 +1602,6 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
             {% endif %}
           </div>
           {% endfor %}
-        </div>
-      </div>
-    </div>
-    <div class="ag-run-opt">
-      <label class="block text-xs text-slate-500 mb-1" for="agThinkBtn"
-             data-i18n="agents.thinking_label">Thinking</label>
-      <div class="ag-sel ag-sel-left" id="agThinkSel">
-        <input type="hidden" id="agThink" value="" autocomplete="off">
-        <button type="button" class="ag-sel-btn" id="agThinkBtn"
-                aria-haspopup="listbox" aria-expanded="false" aria-controls="agThinkMenu">
-          <span class="ag-sel-label">—</span>
-          <svg class="ag-sel-chev" viewBox="0 0 12 8" aria-hidden="true">
-            <path d="M1 1.6 6 6.4l5-4.8" fill="none" stroke="currentColor"
-                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        {# All four levels are rendered and the model's own set decides which stay
-           visible. Which levels a model accepts differs per model and the
-           mismatch is silent — "minimal" on Gemini Pro or 3.8 Flash is a 400
-           from the API — so the visible set is filtered from the selected
-           option's data-thinking rather than assumed here. #}
-        <div class="ag-sel-menu" id="agThinkMenu" role="listbox" tabindex="-1"
-             aria-label="Thinking level" hidden>
-          <div class="ag-sel-opt" role="option" id="agThinkOpt0" data-value="minimal"
-               aria-selected="false"><span data-i18n="agents.think_minimal">Minimal</span></div>
-          <div class="ag-sel-opt" role="option" id="agThinkOpt1" data-value="low"
-               aria-selected="false"><span data-i18n="agents.think_low">Low</span></div>
-          <div class="ag-sel-opt" role="option" id="agThinkOpt2" data-value="medium"
-               aria-selected="false"><span data-i18n="agents.think_medium">Medium</span></div>
-          <div class="ag-sel-opt" role="option" id="agThinkOpt3" data-value="high"
-               aria-selected="true"><span data-i18n="agents.think_high">High</span></div>
         </div>
       </div>
     </div>
@@ -3277,14 +3247,12 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
                                // Write the report in the language the page is
                                // being read in.
                                lang: I18n.getLang(),
-                               // A table key and a thinking level, absent when
-                               // the deployment turned the picker off (the
-                               // elements are then not rendered at all). The
-                               // server resolves both and records what it used,
-                               // so a stale key here costs a fallback, not a
-                               // failed run.
-                               model: document.getElementById('agModel')?.value || '',
-                               thinking: document.getElementById('agThink')?.value || '' }),
+                               // A table key, absent when the deployment turned
+                               // the picker off (it is then not rendered at
+                               // all). No thinking level: the server runs the
+                               // row at its own, and records what it used, so a
+                               // stale key costs a fallback, not a failed run.
+                               model: document.getElementById('agModel')?.value || '' }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok && d.reason === 'ticker_not_found') {
@@ -4017,67 +3985,31 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
   makeListbox('agStatusSel', 'agStatusFilter', 'agStatusBtn', 'agStatusMenu',
               'agents.status_label');
 
-  // ── Model + thinking pickers ─────────────────────────────────────────────
-  // The two are coupled: which thinking levels exist is a property of the model,
-  // and the mismatch is silent upstream -- "minimal" on Gemini Pro or 3.8 Flash is
-  // a 400 from the API, minutes into a paid run. So the model's own
-  // data-thinking is what decides which rows the thinking menu shows, and the
-  // value is re-clamped every time the model changes.
+  // ── Model picker ─────────────────────────────────────────────────────────
+  // Four rows since 2026-10-07, each run at its model's own thinking level, so
+  // there is no thinking control: the run POST sends none and the server applies
+  // the row's default (agent_models.resolve).
   const modelSel = makeListbox('agModelSel', 'agModel', 'agModelBtn',
                                'agModelMenu', 'agents.model_label');
-  const thinkSel = makeListbox('agThinkSel', 'agThink', 'agThinkBtn',
-                               'agThinkMenu', 'agents.thinking_label');
   // Remembered so a reader who prefers the cheap tier does not re-pick it every
   // visit. Namespaced like <app>_theme, and validated on read rather than
-  // trusted: model ids churn, so a stored key may name a row that no longer
-  // exists or one whose provider has since lost its credential.
+  // trusted: a stored key may name a row since retired (RETIRED maps it to the
+  // row that replaced it) or one whose provider has since lost its credential.
   const MODEL_LS = 'ystocker_agents_model';
-  const THINK_LS = 'ystocker_agents_thinking';
+  const RETIRED = {{ (agent_env.model_retired or {}) | tojson }};
   const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  const storedKey = () => { const k = lsGet(MODEL_LS); return RETIRED[k] || k; };
 
-  if (modelSel && thinkSel) {
-    // Reflect the chosen model onto the thinking control: show only the levels it
-    // accepts, and disable the control outright for a provider that has no such
-    // parameter rather than leaving an input that silently does nothing.
-    //
-    // ``reset`` is the difference between the reader changing model and the page
-    // restoring state. Changing model adopts that model's own default, because a
-    // tier means both halves of its bargain -- carrying "high" onto the cheapest
-    // tier spends back exactly what the cheaper model saved. Restoring does not,
-    // because a stored level *is* the reader's expressed choice.
-    function syncThinking({ notify = false, reset = false } = {}) {
-      const opt = modelSel.selected();
-      const raw = (opt?.dataset.thinking || '').trim();
-      const allowed = raw ? raw.split(',').filter(Boolean) : [];
-      thinkSel.options().forEach(o => {
-        o.hidden = !allowed.includes(o.dataset.value || '');
-      });
-      thinkSel.setEnabled(allowed.length > 0, 'agents.think_na');
-      if (!allowed.length) {
-        // Cleared as well as disabled, so a level left over from the previous
-        // model is not what the run POST sends for a provider that has none.
-        if (thinkSel.value()) thinkSel.clear();
-        return;
-      }
-      const want = thinkSel.value();
-      const fallback = opt?.dataset.thinkingDefault || allowed[allowed.length - 1];
-      if (reset || !allowed.includes(want)) thinkSel.select(fallback, { notify });
-      else thinkSel.refresh();
-    }
-
-    // Restore, most specific first. An unavailable, retired or locked row simply
-    // fails to select, leaving the server-rendered default in place -- which is
-    // why select() reports whether it matched.
-    const storedModel = lsGet(MODEL_LS);
+  if (modelSel) {
+    // Restore, most specific first. An unavailable or locked row simply fails
+    // to select, leaving the server-rendered default in place -- which is why
+    // select() reports whether it matched.
+    const storedModel = storedKey();
     if (storedModel) modelSel.select(storedModel, { notify: false });
     if (!modelSel.value()) {
       modelSel.select('{{ agent_env.model_choice_default }}', { notify: false });
     }
-    syncThinking();
-    const storedThink = lsGet(THINK_LS);
-    if (storedThink) thinkSel.select(storedThink, { notify: false });
-    syncThinking();
 
     // ── Which rows this run may use ────────────────────────────────────────
     // Free runs use FREE_KEY; every other row is for a paid run: Pro or a
@@ -4102,12 +4034,9 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
       const cur = modelSel.selected();
       if (!ok && (!cur || cur.dataset.locked || !modelSel.value())) {
         modelSel.select(FREE_KEY, { notify: false });
-        syncThinking({ reset: true });
       } else if (ok && modelSel.value() === FREE_KEY) {
-        const stored = lsGet(MODEL_LS);
-        if (stored && stored !== FREE_KEY && modelSel.select(stored, { notify: false })) {
-          syncThinking();
-        }
+        const stored = storedKey();
+        if (stored && stored !== FREE_KEY) modelSel.select(stored, { notify: false });
       }
     }
     window.agApplyTier = applyTier;
@@ -4123,13 +4052,6 @@ body.agents-embedded #agDock { right: 12px; bottom: 12px; }
 
     document.getElementById('agModel')?.addEventListener('change', () => {
       lsSet(MODEL_LS, modelSel.value());
-      // reset + notify so the level this model actually ended up with is the one
-      // stored, rather than leaving a "medium" behind that Pro would reject on
-      // the next visit.
-      syncThinking({ notify: true, reset: true });
-    });
-    document.getElementById('agThink')?.addEventListener('change', () => {
-      lsSet(THINK_LS, thinkSel.value());
     });
   }
 
