@@ -946,6 +946,21 @@ def _pace() -> None:
         _last_request = time.monotonic()
 
 
+def _after_fork_in_child() -> None:
+    """Fresh locks for a forked gunicorn worker. The sweep runs in the master
+    and holds ``_pace_lock`` through its 1.5 s sleep, so a worker forked mid-
+    sweep would inherit it held: its first look-up would hang for good and
+    every later one queue behind it (``sec13f._after_fork_in_child`` has the
+    incident). ``_write_lock`` and ``_digest_lock`` are the master's too."""
+    global _pace_lock, _write_lock, _digest_lock
+    _pace_lock = threading.Lock()
+    _write_lock = threading.Lock()
+    _digest_lock = threading.Lock()
+
+
+os.register_at_fork(after_in_child=_after_fork_in_child)
+
+
 def _edgar_get(url: str) -> Any:
     from ystocker.sec13f import edgar_get
 

@@ -3760,6 +3760,31 @@ Started in `create_app()`, all daemon threads:
   a white card renders as a **black block**, which is why `--t-fade-from/to`
   exist.
 - **`kill -HUP` does not reload code under `--preload`.** Gunicorn's HUP handler re-reads the config file, not the WSGI app, which the master imported once at `ExecStart`. Workers re-fork from the old module state, so new Python never runs — while templates *do* refresh, because a fresh worker has an empty Jinja cache. The deploy one-liner in this file used HUP for a long time and was therefore shipping stale code. Use `systemctl restart`.
+- **A lock a master thread holds when gunicorn forks stays held in the
+  worker.** Under `--preload` the master runs the background threads and forks
+  every worker, at boot and at each recycle. A fork copies a held
+  `threading.Lock` held, and no thread in the child will release it.
+  `sec13f._throttle` holds `_rate_lock` through its sleep, so during a refresh
+  it is held nearly all the time.
+  - **What it did.** On 2026-10-08 the workers forked during a new box's first
+    13F fetch. An anonymous `/13f/refresh` in one of them hung all six fetch
+    threads on the lock and finished 0 of 48 funds in 900 s. It then saved 48
+    time-outs over the good file, which only the master's copy in memory kept
+    off the page. Any EDGAR caller in such a worker hangs the same way:
+    Fundamentals builds and insider look-ups too.
+  - **The rule.** If a master thread holds a lock through a sleep or a request,
+    and the lock's callers also run in workers, replace it in the child with
+    `os.register_at_fork(after_in_child=…)`. `sec13f` and `insiders` do, and
+    `sec13f` replaces its session as well: a pooled TLS connection used from
+    two processes breaks for both. `congress._pace_lock` is left alone, since
+    only the master fetches.
+  - **The 13F refresh.** A refresh with nothing in memory now carries forward
+    from the disk copy. `/13f/refresh` refuses within ten minutes of the last
+    refresh (`sec13f.manual_refresh_allowed`), because the ↻ cooldown was
+    enforced only in the browser.
+
+  Tests: `tests/test_fork_safety.py` forks for real while a thread holds each
+  lock.
 - **A `DeferLoad` anchor that is hidden defers nothing, and says so only in the console.**
   `IntersectionObserver` can never fire for an element with no box, so
   `deferload.js` detects that case and runs the loader *immediately* — the panel

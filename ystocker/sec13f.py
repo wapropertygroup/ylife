@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import statistics
 import threading
@@ -764,11 +765,16 @@ _sec13f_warming: bool = False
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
-_SESSION = requests.Session()
-_SESSION.headers.update({
-    "User-Agent": "yStocker/1.0 ystocker-app@example.com",
-    "Accept-Encoding": "gzip, deflate",
-})
+def _new_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "yStocker/1.0 ystocker-app@example.com",
+        "Accept-Encoding": "gzip, deflate",
+    })
+    return session
+
+
+_SESSION = _new_session()
 _LAST_REQ_TIME: float = 0.0
 _RATE_LIMIT_INTERVAL = 0.15   # seconds between requests
 _rate_lock = threading.Lock()
@@ -791,7 +797,8 @@ def _throttle() -> None:
     read-modify-write on `_LAST_REQ_TIME` races: under the ThreadPoolExecutor in
     `refresh_cache()` several threads could read the same timestamp, each
     conclude no wait was needed, and fire together -- precisely the burst SEC's
-    request-rate limit punishes.
+    request-rate limit punishes. It is also why a forked worker needs its own
+    lock (:func:`_after_fork_in_child`).
     """
     global _LAST_REQ_TIME
     with _rate_lock:
@@ -799,6 +806,31 @@ def _throttle() -> None:
         if gap < _RATE_LIMIT_INTERVAL:
             time.sleep(_RATE_LIMIT_INTERVAL - gap)
         _LAST_REQ_TIME = time.time()
+
+
+def _after_fork_in_child() -> None:
+    """Give a forked gunicorn worker its own locks and connections.
+
+    Under ``--preload`` each worker is forked from the master while the
+    master's threads are mid-work, and a fork copies a held lock *held*, with
+    no thread in the child to release it. ``_throttle`` holds ``_rate_lock``
+    across its sleep, so during a refresh it is held nearly all the time. On
+    2026-10-08 the workers were forked at 03:10:30 UTC, during a new box's
+    first 13F fetch. A ``/13f/refresh`` in one of them blocked all six fetch
+    threads on that lock, finished 0 of 48 funds in 900 s, and saved 48
+    time-outs over the good file. Every EDGAR caller in such a worker hangs the
+    same way: Fundamentals builds, insider look-ups, SEC's directory. The
+    session goes too: a pooled TLS connection used from two processes breaks
+    for both.
+    """
+    global _rate_lock, _sec13f_lock, _cusip_cache_lock, _SESSION
+    _rate_lock = threading.Lock()
+    _sec13f_lock = threading.Lock()
+    _cusip_cache_lock = threading.Lock()
+    _SESSION = _new_session()
+
+
+os.register_at_fork(after_in_child=_after_fork_in_child)
 
 
 def _get(url: str, **kwargs) -> requests.Response:
@@ -2075,16 +2107,29 @@ def _save_cache(data: dict, ts: float) -> None:
         log.exception("Failed to save 13F cache")
 
 
-def _load_cache() -> bool:
-    global _sec13f_data, _sec13f_ts
+def _read_disk_payload() -> Optional[dict]:
+    """The saved payload if this code's version wrote it, whatever its age."""
     if not _CACHE_FILE.exists():
-        return False
+        return None
     try:
         payload = json.loads(_CACHE_FILE.read_text())
-        if payload.get("version") != _CACHE_VER:
-            log.info("13F disk cache is version %r, this code writes %r -- refetching",
-                     payload.get("version"), _CACHE_VER)
-            return False
+    except (OSError, ValueError):
+        log.exception("Failed to read 13F cache")
+        return None
+    version = payload.get("version") if isinstance(payload, dict) else None
+    if version != _CACHE_VER:
+        log.info("13F disk cache is version %r, this code writes %r -- refetching",
+                 version, _CACHE_VER)
+        return None
+    return payload
+
+
+def _load_cache() -> bool:
+    global _sec13f_data, _sec13f_ts
+    payload = _read_disk_payload()
+    if payload is None:
+        return False
+    try:
         ts  = float(payload["timestamp"])
         age = time.time() - ts
         if age > _CACHE_TTL:
@@ -2130,6 +2175,13 @@ def refresh_cache() -> None:
         _sec13f_warming = True
         previous = dict(_sec13f_data or {})
     try:
+        if not previous:
+            # A process holding no copy yet -- a worker forked during the
+            # master's first fetch -- would have nothing to carry forward, so a
+            # refresh that finished nothing would save every fund as an error
+            # over a good file (2026-10-08). Yesterday's book from disk, however
+            # old, beats that.
+            previous = dict((_read_disk_payload() or {}).get("data") or {})
         result: dict = {}
         pool = _cf.ThreadPoolExecutor(max_workers=6, thread_name_prefix="sec13f")
         try:
@@ -2221,6 +2273,22 @@ def get_cache_ts() -> Optional[float]:
 def is_warming() -> bool:
     with _sec13f_lock:
         return _sec13f_warming
+
+
+#: The ↻ button's 10-minute cooldown is enforced in the browser only, and one
+#: refresh is ~1,000 EDGAR requests. An anonymous GET started one on 2026-10-08.
+MANUAL_REFRESH_MIN_AGE_SECONDS = 10 * 60
+
+
+def manual_refresh_allowed(now: Optional[float] = None) -> bool:
+    """Whether ``/13f/refresh`` may start a refresh in this process: not while
+    one runs here, and not within ten minutes of the last one."""
+    with _sec13f_lock:
+        warming, ts = _sec13f_warming, _sec13f_ts
+    if warming:
+        return False
+    now = time.time() if now is None else now
+    return ts is None or now - ts >= MANUAL_REFRESH_MIN_AGE_SECONDS
 
 
 def start_background_thread() -> None:

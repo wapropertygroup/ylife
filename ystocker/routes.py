@@ -8312,9 +8312,11 @@ def thirteenf():
 
 @bp.route("/13f/refresh")
 def thirteenf_refresh():
-    """Kick off a background re-fetch of all 13F holdings."""
-    from ystocker.sec13f import refresh_cache
-    threading.Thread(target=refresh_cache, daemon=True, name="sec13f-manual-refresh").start()
+    """Kick off a background re-fetch of all 13F holdings, unless one is running
+    in this process or the last is under ten minutes old."""
+    from ystocker.sec13f import manual_refresh_allowed, refresh_cache
+    if manual_refresh_allowed():
+        threading.Thread(target=refresh_cache, daemon=True, name="sec13f-manual-refresh").start()
     return redirect(url_for("main.thirteenf"))
 
 

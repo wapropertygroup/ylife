@@ -1051,6 +1051,20 @@ class RefreshCacheTests(_StateMixin, unittest.TestCase):
         patcher = mock.patch.object(s, "_save_cache", side_effect=lambda data, ts: self.saved.append(data))
         patcher.start()
         self.addCleanup(patcher.stop)
+        # With nothing in memory a refresh reads the disk copy, so point that
+        # somewhere empty rather than at this checkout's cache/.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patcher = mock.patch.object(s, "_CACHE_FILE", Path(tmp.name) / "sec13f_cache.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _write_disk(self, data, version=None):
+        s._CACHE_FILE.write_text(json.dumps({
+            "version": s._CACHE_VER if version is None else version,
+            "timestamp": time.time() - 3 * 86400,     # past the TTL: still worth carrying
+            "data": data,
+        }))
 
     def _refresh_with_one_slow_fund(self, previous):
         release = threading.Event()
@@ -1129,6 +1143,40 @@ class RefreshCacheTests(_StateMixin, unittest.TestCase):
         self.assertEqual(s._sec13f_data["Broken B"]["error"], "new failure")
         self.assertNotIn("carried_forward", s._sec13f_data["Broken B"])
 
+    def test_with_nothing_in_memory_the_disk_copy_is_carried_forward(self):
+        # 2026-10-08: a worker forked during the master's first fetch held no
+        # copy, every fetch hung, and 48 time-outs were saved over the file.
+        self._write_disk({"Slow B": {"error": None, "holdings": ["on disk"]}})
+        self._refresh_with_one_slow_fund(None)
+        data = s._sec13f_data
+        self.assertEqual(data["Fast A"]["holdings"], ["Fast A"])
+        self.assertEqual(data["Slow B"]["holdings"], ["on disk"])
+        self.assertTrue(data["Slow B"]["carried_forward"])
+        self.assertEqual(self.saved, [data])
+
+    def test_with_nothing_in_memory_a_failed_refetch_keeps_the_disk_book(self):
+        self._write_disk({"Broken B": {"error": None, "quarters": [{"period": "2026-06-30"}],
+                                       "holdings": ["on disk"]}})
+        s._sec13f_data = None
+        with mock.patch.object(s, "FUNDS", {"Broken B": "0000000002"}), \
+             mock.patch.object(s, "fetch_fund_holdings",
+                               return_value={"error": "Could not fetch any holdings", "quarters": []}), \
+             self.assertLogs("ystocker.sec13f", "WARNING"):
+            s.refresh_cache()
+        self.assertEqual(s._sec13f_data["Broken B"]["holdings"], ["on disk"])
+        self.assertTrue(s._sec13f_data["Broken B"]["carried_forward"])
+
+    def test_a_disk_copy_from_older_code_is_not_carried_forward(self):
+        self._write_disk({"Slow B": {"error": None, "holdings": ["old shape"]}},
+                         version=s._CACHE_VER - 1)
+        self._refresh_with_one_slow_fund(None)
+        self.assertIn("Timed out", s._sec13f_data["Slow B"]["error"])
+
+    def test_memory_wins_over_the_disk_copy(self):
+        self._write_disk({"Slow B": {"error": None, "holdings": ["on disk"]}})
+        self._refresh_with_one_slow_fund({"Slow B": {"error": None, "holdings": ["in memory"]}})
+        self.assertEqual(s._sec13f_data["Slow B"]["holdings"], ["in memory"])
+
     def test_each_fund_is_fetched_once_and_no_alias_is_fetched(self):
         fetched = []
         lock = threading.Lock()
@@ -1167,6 +1215,29 @@ class CacheVersionTests(_StateMixin, unittest.TestCase):
             s._sec13f_data = None
             self.assertFalse(s._load_cache())
             self.assertIsNone(s._sec13f_data)
+
+
+class ManualRefreshTests(_StateMixin, unittest.TestCase):
+    """/13f/refresh is an anonymous GET; the browser's cooldown binds no bot."""
+
+    def setUp(self):
+        self._keep_state()
+        s._sec13f_warming = False
+
+    def test_not_while_one_runs_in_this_process(self):
+        s._sec13f_ts, s._sec13f_warming = None, True
+        self.assertFalse(s.manual_refresh_allowed())
+
+    def test_not_within_ten_minutes_of_the_last(self):
+        now = 1_000_000.0
+        s._sec13f_ts = now - 60
+        self.assertFalse(s.manual_refresh_allowed(now))
+        s._sec13f_ts = now - s.MANUAL_REFRESH_MIN_AGE_SECONDS
+        self.assertTrue(s.manual_refresh_allowed(now))
+
+    def test_a_process_with_no_copy_may_refresh(self):
+        s._sec13f_ts = None
+        self.assertTrue(s.manual_refresh_allowed())
 
 
 if __name__ == "__main__":
