@@ -288,7 +288,26 @@ class FindInfotableUrlTests(unittest.TestCase):
         with mock.patch.object(s, "_get_maybe", fake):
             url = s._find_infotable_url("0001624865", "0001624865-22-000003", "xslForm13F_X01/primary_doc.xml")
         self.assertEqual(url, _url_for("1624865", "0001624865-22-000003", "Form13F.xml"))
-        self.assertEqual(calls, ["https://www.sec.gov/Archives/edgar/data/1624865/0001624865-22-000003-index.htm"])
+        self.assertEqual(calls, ["https://www.sec.gov/Archives/edgar/data/1624865/000162486522000003/"
+                                 "0001624865-22-000003-index.htm"])
+
+    def test_the_index_is_read_from_the_accession_folder(self):
+        # Since 2026-10-07 SEC answers the short ".../<cik>/<accession>-index.htm"
+        # 403 and only the folder path 200. Served only at the folder path, the
+        # lookup must still land in one request.
+        calls = []
+
+        def fake_maybe(url, **kwargs):
+            calls.append(url)
+            if url == ("https://www.sec.gov/Archives/edgar/data/1624865/000162486523000002/"
+                       "0001624865-23-000002-index.htm"):
+                return _Resp(_fixture("index_x02_barber_2023q1.html"), "text/html")
+            return None   # what _get_maybe makes of a 403
+
+        with mock.patch.object(s, "_get_maybe", fake_maybe):
+            url = s._find_infotable_url("0001624865", "0001624865-23-000002", "primary_doc.xml")
+        self.assertEqual(url, _url_for("1624865", "0001624865-23-000002", "Form13F.xml"))
+        self.assertEqual(len(calls), 1)
 
     def test_the_information_table_row_beats_the_link_heuristic(self):
         # An unrelated XML listed before the table is the heuristic's "first raw
@@ -1072,6 +1091,43 @@ class RefreshCacheTests(_StateMixin, unittest.TestCase):
         data = s._sec13f_data
         self.assertEqual(data["Fast A"]["holdings"], ["Fast A"])
         self.assertIn("Timed out", data["Slow B"]["error"])
+
+    def test_a_fund_that_fails_to_refetch_keeps_its_previous_book(self):
+        funds = {"Good A": "0000000001", "Broken B": "0000000002", "New C": "0000000003"}
+
+        def fetch(name, cik=None):
+            if name == "Good A":
+                return {"error": None, "quarters": [{"period": "2026-06-30"}], "holdings": ["today"]}
+            return {"error": "Could not fetch any holdings", "quarters": []}
+
+        s._sec13f_data = {
+            "Good A": {"error": None, "quarters": [{"period": "2026-03-31"}], "holdings": ["yesterday"]},
+            "Broken B": {"error": None, "quarters": [{"period": "2026-06-30"}], "holdings": ["kept"]},
+        }
+        with mock.patch.object(s, "FUNDS", funds), \
+             mock.patch.object(s, "fetch_fund_holdings", side_effect=fetch), \
+             self.assertLogs("ystocker.sec13f", "WARNING") as logs:
+            s.refresh_cache()
+        data = s._sec13f_data
+        self.assertEqual(data["Good A"]["holdings"], ["today"])
+        self.assertNotIn("carried_forward", data["Good A"])
+        self.assertEqual(data["Broken B"]["holdings"], ["kept"])
+        self.assertTrue(data["Broken B"]["carried_forward"])
+        self.assertEqual(data["Broken B"]["refresh_error"], "Could not fetch any holdings")
+        self.assertIsNone(data["Broken B"]["error"])
+        # Nothing to fall back on: the error stands.
+        self.assertEqual(data["New C"]["error"], "Could not fetch any holdings")
+        self.assertIn("kept their previous entry: Broken B", "\n".join(logs.output))
+
+    def test_a_previous_error_is_not_carried_over_a_new_error(self):
+        funds = {"Broken B": "0000000002"}
+        s._sec13f_data = {"Broken B": {"error": "old failure", "quarters": []}}
+        with mock.patch.object(s, "FUNDS", funds), \
+             mock.patch.object(s, "fetch_fund_holdings",
+                               return_value={"error": "new failure", "quarters": []}):
+            s.refresh_cache()
+        self.assertEqual(s._sec13f_data["Broken B"]["error"], "new failure")
+        self.assertNotIn("carried_forward", s._sec13f_data["Broken B"])
 
     def test_each_fund_is_fetched_once_and_no_alias_is_fetched(self):
         fetched = []

@@ -3723,9 +3723,18 @@ Started in `create_app()`, all daemon threads:
   The infotable is the INFORMATION TABLE row's raw file, never an
   `xslForm13F_X0n/` view. An X01 view slipping past a literal X02 filter was the
   long-running "mismatched tag: line 33, column 2". A slow refresh keeps
-  finished funds and carries the rest forward, and `_CACHE_VER` (3) forces a
-  refetch when the payload's meaning changes. Tests: `tests/test_sec13f.py`
-  (77). Five need pyexpat, which only the box has; run them there.
+  finished funds and carries the rest forward, and so does a refetch that
+  fails (`carried_forward`, `refresh_error`), and `_CACHE_VER` (4) forces a
+  refetch when the payload's meaning changes.
+
+  The index page is read inside the accession folder,
+  `…/data/<cik>/<accession-no-dashes>/<accession>-index.htm`. Until 2026-10-07
+  the first try was the short form with no folder, which SEC began answering
+  403. Nothing failed loudly: every filing fell back to filename guesses, which
+  find `infotable.xml` and miss a file SEC names by number, so 18 of the 48
+  funds, Berkshire (`56757.xml`) among them, were saved as "Could not fetch any
+  holdings" while the other 30 looked fine. Tests: `tests/test_sec13f.py`
+  (80). Five need pyexpat, which only the box has; run them there.
 - **A fund has no company data, and asking Yahoo for it anyway is not free.**
   An ETF's earnings dates, insider trades, statements and EPS trend all come
   back as a 404 ("No fundamentals data found for symbol: SPY"). That was about

@@ -751,7 +751,10 @@ _CACHE_TTL  = 24 * 60 * 60  # 24 h — 13F data changes quarterly
 #: entities that actually file their 13F-HR, and the aliases dropped.
 #: 3: amendments resolved by type (a version-2 file can hold a NEW HOLDINGS
 #: amendment's few rows as a whole quarter), and reported_value_millions added.
-_CACHE_VER  = 3
+#: 4 (2026-10-07): a version-3 file can hold 18 funds as "Could not fetch any
+#: holdings", saved while SEC answered the short index URL 403 (see
+#: _find_infotable_url). Without the bump the next fix would be a day away.
+_CACHE_VER  = 4
 
 _sec13f_lock: threading.Lock = threading.Lock()
 _sec13f_data: Optional[Dict] = None
@@ -1295,6 +1298,14 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
 
     A data.sec.gov ``…-index.json`` used to be tried first. It answered 404 for
     every filing tested in 2026-10, so all it did was cost a request.
+
+    The index page is asked for inside the accession's folder first. The short
+    form, ``…/data/<cik>/<accession>-index.htm`` with no folder, was the first
+    try until 2026-10-07, when SEC was found answering it 403 while the folder
+    path answered 200. Nothing failed loudly: every filing fell through to the
+    filename guesses, which find ``infotable.xml`` and miss a file SEC names by
+    number. Berkshire's is ``56757.xml``, so 18 of the 48 funds were saved as
+    "Could not fetch any holdings" while the other 30 looked fine.
     """
     cik_int    = str(int(cik))
     acc_nodash = accession.replace("-", "")
@@ -1309,10 +1320,10 @@ def _find_infotable_url(cik: str, accession: str, primary_doc: str = "") -> Opti
         return None
 
     for htm_url in [
+        f"{doc_base}/{acc_dashed}-index.htm",
         f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_dashed}-index.htm",
         f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_dashed}-index.htm",
         f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
-        f"https://data.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}-index.htm",
     ]:
         r2 = _get_maybe(htm_url)
         if r2 is None:
@@ -2130,6 +2141,7 @@ def refresh_cache() -> None:
             # interrupted: it finishes in the background and its result is unused.
             pool.shutdown(wait=False, cancel_futures=True)
 
+        refetch_failed: List[str] = []
         for fut in done:
             name = futures[fut]
             try:
@@ -2137,6 +2149,19 @@ def refresh_cache() -> None:
             except Exception as exc:
                 log.warning("13F: parallel fetch failed for %s: %s", name, exc)
                 result[name] = {"error": str(exc), "quarters": []}
+            # A failed refetch keeps yesterday's book rather than replacing it
+            # with an error for a day: the filings did not change, the fetch
+            # did. The error rides along so the page can still say so.
+            prev = previous.get(name)
+            if (result[name].get("error") and isinstance(prev, dict)
+                    and not prev.get("error") and prev.get("quarters")):
+                result[name] = dict(prev, carried_forward=True,
+                                    refresh_error=result[name]["error"])
+                refetch_failed.append(name)
+        if refetch_failed:
+            log.warning("13F refresh: %d funds failed to refetch and kept their "
+                        "previous entry: %s", len(refetch_failed),
+                        ", ".join(sorted(refetch_failed)))
 
         carried: List[str] = []
         lost: List[str] = []
