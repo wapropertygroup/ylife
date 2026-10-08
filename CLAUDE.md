@@ -152,17 +152,23 @@ additionally converges the machine over SSH (CloudFormation, pip, systemd units,
 nginx, certbot, swap, CJK font) and needs a `.pem`; use it for a new box or after
 editing a unit file, not to ship code.
 
-**The repository is private (since 2026-10-04), and this is a personal
-project.** The box fetches `/opt/ystocker` over SSH with a read-only deploy key
-(`/root/.ssh/ylife_deploy`, `Host github-ylife` in `/root/.ssh/config`, origin
-`git@github-ylife:wapropertygroup/ylife.git`), so every deploy prints "?? box
-origin is git@github-ylife:…, laptop origin is https://…". That line is
-expected. Commits here use the repo-local `user.email` (personal), never the
-global work address, and signing is off (`commit.gpgsign` / `tag.gpgSign`
-false in `.git/config`): a signature made with the work signing helper embeds a
-corporate certificate in the commit. Keep internal hostnames and work tooling
-out of the tree, and keep agent configuration (`.claude/`, `.agents/`) out of
-git, both of which `.gitignore` now covers.
+**The repository is public, and this is a personal project.** It was made
+private on 2026-10-04 and was public again by 2026-10-08, which the owner
+confirmed is intended. The box clones and fetches it over HTTPS with no
+credentials. The stack's `GitRepo` parameter still holds
+`https://github.com/15th-Ave-NE/ystocker.git`, an old name GitHub redirects,
+so the box rebuilt on 2026-10-08 has that origin, and every deploy prints "??
+box origin is https://github.com/15th-Ave-NE/ystocker.git, laptop origin is
+https://github.com/wapropertygroup/ylife.git". That line is expected. (The box
+before it fetched over SSH with a read-only deploy key, `Host github-ylife`;
+nothing needs one while the repo is public.) Commits here use the repo-local
+`user.email` (personal), never the global work address, and signing is off
+(`commit.gpgsign` / `tag.gpgSign` false in `.git/config`): a signature made
+with the work signing helper embeds a corporate certificate in the commit.
+Keep internal hostnames and work tooling out of the tree, and keep agent
+configuration (`.claude/`, `.agents/`) out of git, both of which `.gitignore`
+now covers. Being public makes these rules matter more: everything committed
+is world-readable.
 
 **Its whole history was rewritten the same day** (git-filter-repo, at the
 user's request), along with the TradingAgents fork's 20 own commits. Every
@@ -3668,12 +3674,13 @@ Started in `create_app()`, all daemon threads:
 
   Amazon Linux 2023, `t3.medium`. **Do not pin the id anywhere that matters** —
   `deploy.sh` resolves it from the tag and only falls back to a literal. The box
-  has now been rebuilt **twice** (2026-08-31, and again by 2026-09-12: the id
-  went `i-0bb73b171210c002e` → `i-061f92cc5b31c7e72`). Each time the elastic IP
-  moved with it, so the site never went down and nothing looked wrong; the only
-  symptom was every SSM call failing with `InvalidInstanceId: Instances not in a
-  valid state for account`, which reads like an SSM agent or permissions fault
-  rather than a stale constant. That this has happened twice is the argument: a
+  has now been rebuilt **three times**: 2026-08-31; by 2026-09-12, when the id
+  went `i-0bb73b171210c002e` → `i-061f92cc5b31c7e72`; and on 2026-10-08, by a
+  CloudFormation stack update at 03:06 UTC that required a new instance. Each
+  time the elastic IP moved with it, so the site never went down and nothing
+  looked wrong; the only symptom was every SSM call failing with
+  `InvalidInstanceId: Instances not in a valid state for account`, which reads
+  like an SSM agent or permissions fault rather than a stale constant. That this keeps happening is the argument: a
   literal written down here is a fact with a shelf life, and the second rebuild
   was diagnosed from scratch because the first one's id had been re-pinned
   instead of removed.
