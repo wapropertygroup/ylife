@@ -297,6 +297,36 @@ class TradeTests(unittest.TestCase):
         self.assertTrue(a["partial"])
         self.assertAlmostEqual(a["value"], 12289 * 81.95 + 638813 * 81.59, places=2)
 
+    # Phillips 66's general counsel, 2026-07-21 (0001534701-26-000026), as the
+    # box's cache holds it: the second line's price lost its decimal point.
+    PSX_NOTE = ("The price reported above is a weighted average price. These shares were sold in multiple "
+                "transactions at prices ranging from $211.00 to ${hi}. The reporting person hereby undertakes "
+                "to provide upon request to the SEC staff, the issuer or a security holder of the issuer full "
+                "information regarding the number of shares and prices at which the transaction was effected.")
+    PSX_TX = [
+        {"security": "Common Stock", "date": "2026-07-20", "code": "S", "shares": 563.0, "price": 211.0082,
+         "ad": "D", "after": 31060.0, "own": "D", "plan": True, "offering": False, "price_note": PSX_NOTE.format(hi="211.03")},
+        {"security": "Common Stock", "date": "2026-07-21", "code": "S", "shares": 3523.0, "price": 2110482.0,
+         "ad": "D", "after": 27537.0, "own": "D", "plan": True, "offering": False, "price_note": PSX_NOTE.format(hi="211.05")},
+    ]
+
+    def test_a_price_its_own_footnote_rules_out_is_unknown(self):
+        (sale,) = ins.filing_trades({"tx": self.PSX_TX})
+        self.assertEqual(sale["shares"], 4086.0)
+        self.assertAlmostEqual(sale["price"], 211.0082, places=4)       # the line that agrees with its note
+        self.assertAlmostEqual(sale["value"], 563 * 211.0082, places=2)  # not $7.4 billion
+        self.assertTrue(sale["partial"])
+
+    def test_a_price_inside_its_footnotes_range_stands(self):
+        tx = [dict(self.PSX_TX[1], price=211.0482)]
+        (sale,) = ins.filing_trades({"tx": tx})
+        self.assertAlmostEqual(sale["value"], 3523 * 211.0482, places=2)
+        self.assertFalse(sale["partial"])
+        # A note with no range, or no note, rules nothing out.
+        for note in ("Weighted average price.", None):
+            (s,) = ins.filing_trades({"tx": [dict(self.PSX_TX[1], price_note=note)]})
+            self.assertAlmostEqual(s["value"], 3523 * 2110482.0, places=0)
+
     def test_rows_carry_the_owner_and_role(self):
         rows = ins.issuer_rows(record(920760, [LEN_BERKSHIRE], ticker="LEN", name="Lennar Corporation"))
         self.assertEqual(len(rows), 2)
@@ -306,6 +336,15 @@ class TradeTests(unittest.TestCase):
         self.assertEqual(row["_ow"], [315090, 1067983])
         self.assertEqual(row["pd"], "xslF345X06/ownership.xml")
         self.assertNotIn("_ow", ins.public(row))
+
+    def test_a_filers_form_4_about_another_company_is_not_its_insiders(self):
+        # Berkshire's submissions list its Lennar purchases too; under BRK-B
+        # they read as Berkshire's insiders buying Berkshire.
+        self.assertEqual(ins.issuer_rows(record(1067983, [LEN_BERKSHIRE], ticker="BRK-B", name="Berkshire Hathaway")), [])
+        f = filing(LEN_BERKSHIRE)
+        f["issuer"] = {}
+        rec = {"cik": 1067983, "ticker": "BRK-B", "name": "Berkshire", "filings": {LEN_BERKSHIRE: f}}
+        self.assertEqual(len(ins.issuer_rows(rec)), 2)      # one naming no issuer is kept
 
 
 class AmendmentTests(unittest.TestCase):

@@ -134,6 +134,11 @@ _FALSE = frozenset({"0", "false", "n", "no"})
 
 #: "Rule 10b5-1", "10b5-1 trading plan", "Rule 10b5-1(c)".
 _PLAN_RE = re.compile(r"10b5-?1", re.I)
+#: A weighted-average price's footnote: "at prices ranging from $211.00 to
+#: $211.05". See _price_ruled_out.
+_PRICE_RANGE_RE = re.compile(r"\$\s?([\d,]+(?:\.\d+)?)\s*(?:to|through|-|–)\s*\$\s?([\d,]+(?:\.\d+)?)", re.I)
+#: How far outside its footnote's range a price may sit before it is a typo.
+PRICE_RANGE_SLACK = 4.0
 #: "not pursuant to a Rule 10b5-1 plan", "other than under ... 10b5-1".
 _PLAN_NEG_RE = re.compile(r"\b(?:not|other than|outside(?:\s+of)?)\b[^.;]{0,80}?10b5-?1", re.I)
 #: Code P is "open market or private purchase". A purchase in an offering or a
@@ -366,6 +371,25 @@ def stake_pct(shares: Optional[float], after: Optional[float], acquired: bool) -
     return round(shares / base * 100.0, 2)
 
 
+def _price_ruled_out(tx: dict[str, Any]) -> bool:
+    """A line whose price its own footnote rules out, by more than
+    PRICE_RANGE_SLACK times either way. Phillips 66's general counsel filed
+    3,523 shares at $2,110,482.00 on 2026-07-21 beside a footnote giving "prices
+    ranging from $211.00 to $211.05": a decimal point dropped, which read as a
+    $7.4 billion sale. Such a price is unknown, as a footnote-only one is."""
+    price, note = tx.get("price"), tx.get("price_note")
+    if price is None or not note:
+        return False
+    m = _PRICE_RANGE_RE.search(note)
+    if not m:
+        return False
+    try:
+        lo, hi = sorted(float(x.replace(",", "")) for x in m.groups())
+    except ValueError:
+        return False
+    return lo > 0 and not (lo / PRICE_RANGE_SLACK <= price <= hi * PRICE_RANGE_SLACK)
+
+
 def filing_trades(filing: dict[str, Any]) -> list[dict[str, Any]]:
     """A filing's non-derivative lines as trades.
 
@@ -396,7 +420,7 @@ def filing_trades(filing: dict[str, Any]) -> list[dict[str, Any]]:
         dates = sorted(t["date"] for t in lines if t.get("date"))
         counted = [t for t in lines if t.get("shares") is not None]
         shares = sum(t["shares"] for t in counted) if counted else None
-        priced = [t for t in counted if t.get("price") is not None]
+        priced = [t for t in counted if t.get("price") is not None and not _price_ruled_out(t)]
         priced_shares = sum(t["shares"] for t in priced)
         value = sum(t["shares"] * t["price"] for t in priced) if priced else None
         if priced and priced_shares > 0:
@@ -527,6 +551,13 @@ def issuer_rows(rec: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for acc, filing in filings.items():
         if acc in gone:
+            continue
+        # A filer's own submissions list the Form 4s it filed as another
+        # company's owner: Berkshire's carry its Lennar purchases, which read
+        # as Berkshire's insiders buying BRK-B. Whose trade it is, the filing
+        # says; one naming no issuer is kept.
+        issuer_cik = (filing.get("issuer") or {}).get("cik")
+        if cik and issuer_cik and int(issuer_cik) != int(cik):
             continue
         owners = filing.get("owners") or []
         primary = owners[0] if owners else {}

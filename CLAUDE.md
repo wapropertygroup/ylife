@@ -3023,6 +3023,17 @@ prefix is the filing agent's, and its path 404s.
   holding before it (100% is a full exit). Measured against the holding after,
   a sale has no ceiling: NVIDIA director Mark Stevens would read 141% where he
   sold 58%.
+- **Whose trade** (2026-10-09): an issuer's submissions also list the Form 4s
+  it filed as *another* company's owner, and those rows were filed under it.
+  Berkshire's Lennar and DaVita purchases read as BRK-B insiders buying,
+  Bank of America's muni-fund trades as BAC's, Alphabet's Ethos stake as
+  GOOGL's: 30 filings on the box that day. `issuer_rows` keeps a filing only
+  if the issuer it names is the record's (one naming none is kept).
+- **A price its own footnote rules out** is unknown, as a footnote-only one is
+  (`_price_ruled_out`, more than 4x outside "prices ranging from $A to $B").
+  Phillips 66's general counsel filed 3,523 shares at $2,110,482.00 beside
+  "$211.00 to $211.05", which read as a $7.4 billion sale, the largest insider
+  trade on the site. An LMT sale filed at $0.00 is caught the same way.
 
 Parsed with lxml (entities and network off), not ElementTree, because pyexpat
 cannot load on the dev Mac (gics.py says why) and lxml is already a dependency.
@@ -3050,7 +3061,7 @@ It has its own tab (Insiders, after Earnings) since 2026-10-08, and is linked
 from the mobile drawer and both footers. `held` comes from `/assets`, best
 effort.
 
-Tests: `tests/test_insiders.py` (65, on 26 real Form 4s fetched from the box,
+Tests: `tests/test_insiders.py` (68, on 26 real Form 4s fetched from the box,
 in `tests/fixtures/insiders/`, with each filing's listing row in `index.json`)
 and `tests/check_insiders_endpoints.py` (15, hermetic). Not a DynamoDB table:
 every filing can be fetched again.
