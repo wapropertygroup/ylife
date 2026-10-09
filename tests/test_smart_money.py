@@ -15,6 +15,9 @@ What is pinned:
 * "same way" needs two sources on one side and none on the other, and says
   how many days apart their latest dates are;
 * the window: Form 4s and PTRs filed before it are left out;
+* each stock's ``who`` entries carry the id their person has in ``people``,
+  list up to MAX_WHO people, and read "mixed" for someone who traded both
+  ways -- the page's network draws its links from them;
 * one stock's dossier lists the named managers first, then the other funds.
 """
 from __future__ import annotations
@@ -180,6 +183,61 @@ class TickerTests(unittest.TestCase):
     def test_agreements_sort_first(self):
         order = [r["t"] for r in sm.tickers_view(self.funds, INSIDERS, HOUSE, SINCE)]
         self.assertEqual(set(order[:2]), {"NVDA", "BAC"})
+
+
+class WhoTests(unittest.TestCase):
+    """Each stock's ``who`` lists are what the page's network draws its links
+    from, joined to ``people`` by id -- so an entry without the id, or a list
+    cut short, is a link missing from the picture with nothing to say so."""
+
+    def test_every_entry_carries_the_id_its_person_has(self):
+        out = sm.build(HOLDINGS, {"rows": INSIDERS, "coverage": {}}, {"rows": HOUSE, "counts": {}},
+                       today=TODAY, names_zh={"Nancy Pelosi": "南希·佩洛西"})
+        ids = {p["id"] for p in out["people"]}
+        seen = 0
+        for row in out["tickers"]:
+            for src, x in row["src"].items():
+                for w in x["who"]:
+                    self.assertIn(w["id"], ids, (row["t"], src, w["name"]))
+                    seen += 1
+        self.assertGreater(seen, 6)
+        nvda = next(r for r in out["tickers"] if r["t"] == "NVDA")
+        self.assertEqual([w["id"] for w in nvda["src"]["house"]["who"]], ["house-nancy-pelosi"])
+        self.assertIn("ins-huang-jensen-nvda", [w["id"] for w in nvda["src"]["insiders"]["who"]])
+        self.assertEqual({w["id"] for w in nvda["src"]["funds"]["who"]},
+                         {"fund-berkshire-hathaway", "fund-pershing-square"})
+
+    def test_a_dossier_without_peoples_ids_still_reads_the_sides(self):
+        # dossier() hands tickers_view managers built without people's ids.
+        d = sm.dossier("NVDA", HOLDINGS, INSIDERS, HOUSE, today=TODAY)
+        self.assertEqual(d["sides"]["funds"], "buy")
+
+    def test_more_than_eight_people_are_listed(self):
+        house = [dict(HOUSE[0], m=f"Member {i:02d}", md=f"XX{i:02d}") for i in range(sm.MAX_WHO + 5)]
+        row = next(r for r in sm.tickers_view([], [], house, SINCE) if r["t"] == "NVDA")
+        who = row["src"]["house"]["who"]
+        self.assertEqual(len(who), sm.MAX_WHO)
+        self.assertEqual(row["src"]["house"]["buy"], sm.MAX_WHO + 5)   # counts are not cut
+        self.assertEqual(row["actors"], sm.MAX_WHO)
+        self.assertGreater(sm.MAX_WHO, 8)
+
+    def test_a_member_who_bought_and_sold_is_one_mixed_entry(self):
+        house = [HOUSE[0], dict(HOUSE[0], k="sell", dir="sell", d="2026-07-30", doc="20035999")]
+        row = next(r for r in sm.tickers_view([], [], house, SINCE) if r["t"] == "NVDA")
+        self.assertEqual([(w["name"], w["dir"]) for w in row["src"]["house"]["who"]], [("Nancy Pelosi", "mixed")])
+        self.assertEqual((row["src"]["house"]["buy"], row["src"]["house"]["sell"]), (1, 1))
+
+    def test_an_insiders_entry_says_what_set_no_side(self):
+        rows = {r["t"]: r for r in sm.tickers_view([], INSIDERS, [], SINCE)}
+        nvda = {w["name"]: w for w in rows["NVDA"]["src"]["insiders"]["who"]}
+        self.assertEqual((nvda["Doe Jane"]["dir"], nvda["Doe Jane"]["plan"]), ("buy", False))
+        self.assertTrue(nvda["Huang Jensen"]["plan"])
+        self.assertTrue(rows["HLT"]["src"]["insiders"]["who"][0]["offering"])
+
+    def test_the_index_behind_the_lists_is_not_in_the_payload(self):
+        for row in sm.tickers_view(sm.fund_people(HOLDINGS), INSIDERS, HOUSE, SINCE):
+            for x in row["src"].values():
+                self.assertNotIn("_by", x)
 
 
 class BuildAndDossierTests(unittest.TestCase):

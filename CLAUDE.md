@@ -3175,11 +3175,46 @@ company outside the sweep says so rather than "none"); and House trades with
 owner, range, lag and a link to the PTR.
 
 /api/smart-money is recomputed when one of the three caches moves, else at most
-every 10 minutes (~440 KB, ~60 KB gzipped on real data). The page has its own
+every 10 minutes (~520 KB, ~71 KB gzipped on real data). The page has its own
 tab (Smart money, after 13F) since 2026-10-08, and is linked from /13f,
 /insiders, the phone menu and both footers.
-Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (18) and
-`tests/check_sectors_money_endpoints.py` (15, hermetic).
+Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (24) and
+`tests/check_sectors_money_endpoints.py` (16, hermetic).
+
+**The network (星系图), after openbit.trade/people's** (asked 2026-10-09: "这个graph很好看啊").
+A canvas over the table, drawn by `static/smart_graph.js` from the same
+payload: beside the panel from 1000px, above it on a phone (grid areas), so a
+tap's answer is under the picture.
+- **What it draws.** A stock is a disc whose ring has three arcs, 13F from 12
+  o'clock, then insiders, then House, each in its source's side colour; two or
+  more agreeing also glows. A person is a dot coloured by kind. A link is
+  coloured by what they did, dashed where it sets no side (a hold, a 10b5-1
+  plan sale, an offering), and a dot runs along it the way the money went.
+- **What goes in.** The table's own filters, then the stocks with the most
+  people on them (44, 34 or 22 by width, `MAX_STOCKS`), not the table's
+  agreement-first order, which left out every mega-cap hub. A pick always gets
+  in: a stock, or every stock a picked person moved (`focusRows`). A hold only
+  joins a manager and a stock already drawn.
+- **A company's insiders are one node.** One by one they were 545 of 1,258
+  links, each a leaf on one stock, and most of the picture.
+- **The links are the `who` lists, which had to change.** They stopped at 8
+  per source per stock, so sixteen managers moved GOOGL and eight were listed,
+  in the panel too. `MAX_WHO` is 30 (only TSM's insiders reached it on
+  2026-10-09). Every entry carries its person's id (`_fund_id`,
+  `_insider_id`, `_house_id`, shared with `people`), and someone who traded
+  both ways reads "mixed".
+- **Costs.** The layout is a seeded force simulation, about 20 ms for 130
+  nodes, so a reload draws the same picture. The dots draw at ~30 fps, about
+  2% of a core. The loop stops off-screen, in a hidden tab and under reduced
+  motion.
+- **The pointer.** Hover for a tooltip. Click to pick: a person switches to
+  By person, an insider group picks its stock, the background clears the
+  light. Drag a node; zoom with the buttons or ⌘/Ctrl + wheel (a plain wheel
+  scrolls the page). Nothing is lit until something is asked for, though the
+  panel still shows the first row. The controller hangs on the stage as
+  `#moGraph.smartGraph` (`screenOf(id)` for browser checks).
+- **Tests.** `node tests/check_smart_graph.mjs` (65: the joins, the cut, picks,
+  holds, old payloads, determinism, overlaps, labels, the page's wiring).
 
 ### Prediction markets (`/predictions`)
 

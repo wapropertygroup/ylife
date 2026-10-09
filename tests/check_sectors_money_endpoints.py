@@ -227,6 +227,21 @@ class SmartMoneyEndpoints(_Base):
             self.assertIn('href="/smart-money"', self.client.get("/13f").get_data(as_text=True))
         self.assertIn('href="/smart-money"', self.client.get("/insiders").get_data(as_text=True))
 
+    def test_the_network_is_on_the_page_on_both_hosts(self):
+        for base in ("http://localhost", TA):
+            html = self.client.get("/smart-money", base_url=base).get_data(as_text=True)
+            self.assertIn('id="moGraph"', html, base)
+            self.assertRegex(html, r'src="/static/smart_graph\.js\?v=[^"]+"', base)
+            # The module before the page script that mounts it.
+            self.assertLess(html.index("smart_graph.js"), html.index("SmartGraph.mount("), base)
+            for zoom in ("in", "out", "fit"):
+                self.assertIn(f'data-mo-zoom="{zoom}"', html, base)
+        # The network, the panel and the table, in that order, so a phone
+        # shows a pick's answer under the network.
+        self.assertLess(html.index('id="moGraph"'), html.index('id="moDetail"'))
+        self.assertLess(html.index('id="moDetail"'), html.index('id="moRows"'))
+        self.assertEqual(self.client.get("/static/smart_graph.js").status_code, 200)
+
 
 class HistoryTab(_Base):
 

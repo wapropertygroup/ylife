@@ -29,8 +29,11 @@
                border: 1px solid var(--t-line-strong); background: var(--t-surface); color: var(--t-ink-strong); }
   .mo-search:focus { outline: none; border-color: var(--t-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
 
-  .mo-main { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 1000px) { .mo-main { grid-template-columns: minmax(0, 1fr) minmax(0, 360px); } }
+  /* The network, then the panel, then the table on a phone, so a tap in the
+     network shows its answer right under it; beside both from 1000px. */
+  .mo-main { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "graph" "detail" "list"; }
+  @media (min-width: 1000px) { .mo-main { grid-template-columns: minmax(0, 1fr) minmax(0, 360px); grid-template-areas: "graph detail" "list detail"; } }
+  .mo-graph { grid-area: graph; } .mo-list { grid-area: list; } .mo-detail { grid-area: detail; }
   .mo-card { min-width: 0; border: 1px solid var(--t-line); border-radius: 12px; background: var(--t-surface); }
   .mo-list { overflow: hidden; }
   .mo-rows { max-height: 720px; overflow-y: auto; }
@@ -110,6 +113,48 @@
   .mo-infer { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
   .mo-infer div { font-size: 12px; line-height: 1.55; color: var(--t-ink); padding: 8px 10px; border: 1px solid var(--t-line); border-radius: 10px; background: var(--t-surface); }
   .mo-infer b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--t-ink-dim); margin-bottom: 2px; }
+
+  /* The network (static/smart_graph.js draws the canvas). Its colours are the
+     canvas palette's, so the legend matches what it labels. */
+  :root { --mo-g-fund: #7c3aed; --mo-g-insider: #64748b; --mo-g-house: #0284c7; --mo-g-hold: #94a3b8; }
+  .dark { --mo-g-fund: #a78bfa; --mo-g-insider: #e2e8f0; --mo-g-house: #38bdf8; --mo-g-hold: #64748b; }
+  .mo-graph { overflow: hidden; }
+  .mo-g-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 9px 12px; border-bottom: 1px solid var(--t-line); }
+  .mo-g-title { font-size: 12px; font-weight: 700; color: var(--t-ink-strong); letter-spacing: .03em; }
+  .mo-g-stat { font-size: 11.5px; color: var(--t-ink-muted); font-variant-numeric: tabular-nums; min-width: 0; }
+  .mo-g-tools { margin-left: auto; display: flex; gap: 4px; }
+  .mo-g-btn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--t-line-strong); background: transparent;
+              color: var(--t-ink-muted); cursor: pointer; font-size: 15px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+  .mo-g-btn:hover { color: var(--t-ink-strong); border-color: var(--t-line-hover); }
+  .mo-g-stage { position: relative; height: 560px; background: radial-gradient(120% 90% at 50% 42%, #ffffff 0%, #f8fafc 70%, #f1f5f9 100%); }
+  .dark .mo-g-stage { background: radial-gradient(120% 90% at 50% 42%, #0d1630 0%, #070b17 58%, #04060d 100%); }
+  @media (max-width: 720px) { .mo-g-stage { height: 460px; } }
+  @media (max-width: 440px) { .mo-g-stage { height: 400px; } }
+  .mo-g-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px;
+                font-size: 12.5px; color: var(--t-ink-muted); text-align: center; pointer-events: none; }
+  /* Its own display would beat the UA's [hidden] (CLAUDE.md, Known Pitfalls). */
+  .mo-g-empty[hidden] { display: none; }
+  .sg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; }
+  .sg-canvas.is-over { cursor: pointer; }
+  .sg-canvas.is-dragging { cursor: grabbing; }
+  .sg-tip { position: absolute; z-index: 2; pointer-events: none; max-width: 290px; padding: 8px 10px; border-radius: 10px;
+            font-size: 12px; line-height: 1.5; color: var(--t-ink); background: var(--t-surface);
+            border: 1px solid var(--t-line-strong); box-shadow: 0 10px 28px rgba(2, 6, 23, .28); }
+  .sg-tip b { color: var(--t-ink-strong); }
+  .sg-tip .sg-tip-sub { color: var(--t-ink-dim); font-size: 11px; }
+  .sg-tip .sg-tip-row { margin-top: 3px; }
+  .sg-tip .sg-tip-hint { margin-top: 5px; font-size: 10.5px; color: var(--t-ink-dim); }
+  .sg-tip .up { color: var(--mo-up); } .sg-tip .down { color: var(--mo-down); } .sg-tip .mix { color: var(--mo-mix); }
+  .mo-g-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; padding: 8px 12px; border-top: 1px solid var(--t-line);
+                 font-size: 11px; color: var(--t-ink-muted); }
+  .mo-g-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .mo-g-line { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+  .mo-g-line.buy { border-color: var(--mo-up); } .mo-g-line.sell { border-color: var(--mo-down); }
+  .mo-g-line.mixed { border-color: var(--mo-mix); } .mo-g-line.soft { border-top-style: dashed; border-color: var(--mo-g-hold); }
+  .mo-g-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .mo-g-dot.fund { background: var(--mo-g-fund); } .mo-g-dot.insider { background: var(--mo-g-insider); } .mo-g-dot.house { background: var(--mo-g-house); }
+  .mo-g-ring { width: 16px; height: 16px; flex: none; }
+  .mo-g-hint { flex-basis: 100%; color: var(--t-ink-dim); }
 </style>
 
 <h1 class="mo-h1" data-i18n="smart.title">Smart money</h1>
@@ -139,8 +184,34 @@
 </div>
 
 <div class="mo-main">
-  <section class="mo-card mo-list"><div id="moHead"></div><div id="moRows" class="mo-rows"></div><button type="button" id="moMore" class="mo-more" hidden></button></section>
+  <section class="mo-card mo-graph" aria-labelledby="moGraphTitle">
+    <div class="mo-g-head">
+      <span id="moGraphTitle" class="mo-g-title" data-i18n="smart.g_title">Network</span>
+      <span id="moGraphStat" class="mo-g-stat"></span>
+      <span class="mo-g-tools">
+        <button type="button" class="mo-g-btn" data-mo-zoom="in" data-i18n-title="smart.g_zoom_in" title="Zoom in">+</button>
+        <button type="button" class="mo-g-btn" data-mo-zoom="out" data-i18n-title="smart.g_zoom_out" title="Zoom out">−</button>
+        <button type="button" class="mo-g-btn" data-mo-zoom="fit" data-i18n-title="smart.g_fit" title="Show everything">⤢</button>
+      </span>
+    </div>
+    <div id="moGraph" class="mo-g-stage" role="img"><p id="moGraphEmpty" class="mo-g-empty" data-i18n="smart.loading">Loading…</p></div>
+    <div class="mo-g-legend">
+      <span><i class="mo-g-line buy"></i><span data-i18n="smart.g_buy">bought</span></span>
+      <span><i class="mo-g-line sell"></i><span data-i18n="smart.g_sell">sold</span></span>
+      <span><i class="mo-g-line mixed"></i><span data-i18n="smart.g_mixed">both ways</span></span>
+      <span><i class="mo-g-line soft"></i><span data-i18n="smart.g_soft">held, or a 10b5-1 plan trade</span></span>
+      <span><i class="mo-g-dot fund"></i><span data-i18n="smart.src_funds">Fund managers</span></span>
+      <span><i class="mo-g-dot insider"></i><span data-i18n="smart.src_insiders">Insiders</span></span>
+      <span><i class="mo-g-dot house"></i><span data-i18n="smart.src_house">House members</span></span>
+      <span><svg class="mo-g-ring" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke-width="2.6">
+        <path d="M8.51 2.22 A5.8 5.8 0 0 1 13.26 10.45" stroke="var(--mo-up)"/>
+        <path d="M12.75 11.33 A5.8 5.8 0 0 1 3.25 11.33" stroke="var(--mo-down)"/>
+        <path d="M2.74 10.45 A5.8 5.8 0 0 1 7.49 2.22" stroke="var(--mo-g-hold)"/></g></svg><span data-i18n="smart.g_ring">ring, clockwise from 12: 13F · insiders · House</span></span>
+      <span class="mo-g-hint" data-i18n="smart.g_hint">Dots run the way the money went: into a stock on a buy, out of it on a sale. Click a stock or a person; drag one to move it; hold ⌘ or Ctrl and scroll to zoom.</span>
+    </div>
+  </section>
   <aside id="moDetail" class="mo-card mo-detail" aria-live="polite"></aside>
+  <section class="mo-card mo-list"><div id="moHead"></div><div id="moRows" class="mo-rows"></div><button type="button" id="moMore" class="mo-more" hidden></button></section>
 </div>
 
 <div class="mo-infer">
@@ -149,6 +220,7 @@
 </div>
 <div id="moNote" class="mo-note"></div>
 
+<script src="{{ url_for('static', filename='smart_graph.js') }}?v={{ cache_bust or 'dev' }}"></script>
 <script>
 // The figures come from /api/smart-money (ystocker/smart_money.py), which
 // reads three caches -- 13F (sec13f.py), Form 4 (insiders.py), House PTRs
@@ -179,6 +251,9 @@
     side: pick(params.get('side'), ['all', 'agree', 'buy', 'sell'], 'all'),
     src: new Set((params.get('src') || SRC.join(',')).split(',').filter(s => SRC.indexOf(s) >= 0)),
     sel: params.get('sel') || '',
+    // The panel always shows something, the first row if nothing was picked;
+    // the network lights up only what was asked for, by a click or a link.
+    picked: !!params.get('sel'),
     shown: PAGE,
   };
   if (!state.src.size) SRC.forEach(s => state.src.add(s));
@@ -415,6 +490,140 @@
     F('moNote').innerHTML = lines.map(x => `<p>${esc(x)}</p>`).join('');
   }
 
+  // ── the network ─────────────────────────────────────────────────────────
+  // static/smart_graph.js builds, places and draws it. This part decides what
+  // goes in -- the table's own filters, plus whatever is picked -- and words
+  // its tooltips and labels, which I18n.apply() cannot reach on a canvas.
+  const graphOn = typeof SmartGraph !== 'undefined' && !!document.createElement('canvas').getContext;
+  let G = null, built = { key: null, focus: null }, graphTimer = null;
+  const DIR_KEY = { buy: 'smart.g_buy', sell: 'smart.g_sell', mixed: 'smart.g_mixed', hold: 'smart.ch_unchanged', none: 'smart.side_none' };
+  const dirClass = d => (d === 'buy' ? 'up' : d === 'sell' ? 'down' : d === 'mixed' ? 'mix' : '');
+
+  function picked() {
+    if (!state.picked || !state.sel || !data) return null;
+    if (state.view === 'stocks') return { t: state.sel };
+    const p = (data.people || []).find(x => x.id === state.sel);
+    return p ? { p: p.id, kind: p.kind, ticker: p.ticker } : null;
+  }
+  // The node a pick lights: a company's insiders are one node beside it.
+  function focusNode(f) {
+    if (!f) return null;
+    if (f.t) return 't:' + f.t;
+    return f.kind === 'insider' ? 'p:ins@' + f.ticker : 'p:' + f.p;
+  }
+  function graphLabel(n) {
+    if (n.group) return fill(tr('smart.g_insiders_n', '{n} insiders'), { n: n.count });
+    const name = (zh() && n.name_zh) || n.name || '';
+    return name.length > 22 ? name.slice(0, 21) + '…' : name;
+  }
+  function graphSub(n) {
+    if (!zh() || typeof I18n === 'undefined' || !I18n.stockName) return '';
+    const name = I18n.stockName(n.key, '');
+    return SmartGraph.hasCJK(name) ? name : '';
+  }
+  function graphTip(n, g) {
+    const hint = key => `<div class="sg-tip-hint">${esc(tr(key, ''))}</div>`;
+    if (n.type === 'stock') {
+      const r = n.row, names = data.names || {};
+      const bits = SRC.filter(s => state.src.has(s) && r.src[s]).map(s => {
+        const x = r.src[s], parts = [];
+        if (x.buy) parts.push(`<span class="up">↑${x.buy}</span>`);
+        if (x.sell) parts.push(`<span class="down">↓${x.sell}</span>`);
+        if (!parts.length && x.hold) parts.push(esc(fill(tr('smart.holds', '{n} hold'), { n: x.hold })));
+        if (!parts.length && x.plan) parts.push(esc(fill(tr('smart.plan_only', '{n} plan'), { n: x.plan })));
+        return `${esc(tr(SRC_SHORT[s], s))} ${parts.join(' ') || '·'}`;
+      });
+      return `<div><b>${esc(r.t)}</b> <span class="sg-tip-sub">${esc(names[r.t] || r.n || '')}</span></div>`
+        + `<div class="sg-tip-row">${agreeText(r)}</div><div class="sg-tip-row">${bits.join(' · ')}</div>`
+        + hint('smart.g_click_stock');
+    }
+    if (n.group) {
+      const rows = n.who.slice(0, 6).map(w => `<div class="sg-tip-row">${esc(w.name || '')}`
+        + (w.title ? ` <span class="sg-tip-sub">${esc(w.title)}</span>` : '')
+        + ` <span class="${dirClass(w.dir)}">${esc(tr(SIDE_KEY[w.dir] || '', w.dir || ''))}</span>`
+        + (w.plan ? ` <span class="sg-tip-sub">${esc(tr('smart.plan', 'under a 10b5-1 plan'))}</span>` : '') + '</div>').join('');
+      const more = n.count > 6 ? `<div class="sg-tip-sub">${esc(fill(tr('smart.g_more', '+{n} more'), { n: n.count - 6 }))}</div>` : '';
+      return `<div><b>${esc(fill(tr('smart.g_insiders_of', '{t} insiders'), { t: n.ticker }))}</b></div>${rows}${more}` + hint('smart.g_click_stock');
+    }
+    const p = (data.people || []).find(x => x.id === n.key);
+    const moves = g.links.filter(l => g.nodes[l.b] === n).map(l => {
+      const word = l.ch ? tr(CH_KEY[l.ch] || '', l.ch) : tr(DIR_KEY[l.dir] || '', l.dir);
+      return `<span class="${dirClass(l.dir)}">${esc(word)}</span> ${esc(g.nodes[l.a].key)}`;
+    });
+    const kind = tr({ fund: 'smart.k_fund', house: 'smart.k_house', insider: 'smart.k_insider' }[n.kind], n.kind);
+    return `<div><b>${esc((zh() && n.name_zh) || n.name)}</b></div>`
+      + `<div class="sg-tip-sub">${esc([kind, p ? personOrg(p) : n.sub].filter(Boolean).join(' · '))}</div>`
+      + `<div class="sg-tip-row">${moves.slice(0, 8).join(' · ')}${moves.length > 8 ? ' · …' : ''}</div>`
+      + hint(p ? 'smart.g_click_person' : 'smart.g_click_stock');
+  }
+  function renderGraphStat(g) {
+    const people = g.nodes.reduce((n, x) => n + (x.type !== 'person' ? 0 : x.group ? x.count : 1), 0);
+    const vals = { s: g.stocks, p: people, l: g.links.length, n: g.total };
+    let line = fill(tr('smart.g_stat', '{s} stocks · {p} people · {l} links'), vals);
+    if (g.total > g.stocks) line += ' · ' + fill(tr('smart.g_cut', 'the busiest of {n}'), vals);
+    F('moGraphStat').textContent = g.nodes.length ? line : '';
+    F('moGraph').setAttribute('aria-label', fill(tr('smart.g_aria', 'Network of {s} stocks and the {p} people who moved them'), vals));
+    F('moGraphEmpty').textContent = tr('smart.g_empty', 'Nothing to draw for these filters.');
+    F('moGraphEmpty').hidden = g.nodes.length > 0;
+  }
+  // Rebuilt when what goes in changes; otherwise only the light moves.
+  function syncGraph(soon) {
+    if (!graphOn || !data) return;
+    clearTimeout(graphTimer);
+    if (soon) { graphTimer = setTimeout(() => syncGraph(false), 260); return; }
+    const stage = F('moGraph');
+    if (!G) G = SmartGraph.mount(stage, { onPick: pickNode, tooltip: graphTip, label: graphLabel, sub: graphSub });
+    const f = picked(), fid = focusNode(f);
+    const max = SmartGraph.maxStocks(stage.clientWidth || 800);
+    const key = JSON.stringify([SRC.filter(s => state.src.has(s)), state.side, F('moSearch').value.trim().toLowerCase(),
+                                max, data.as_of, data.status, (data.tickers || []).length]);
+    const g = G.graph(), rows = stockRows();
+    // A pick brings in what it needs -- a stock, or every stock a person
+    // moved -- once: one that cannot be drawn (no one on it in the sources
+    // switched on) must not rebuild on every render.
+    const missing = !!g && SmartGraph.focusRows(data, rows, f, state.src).some(r => !g.nodes.some(n => n.id === 't:' + r.t));
+    if (key !== built.key || !g || (missing && built.focus !== fid)) {
+      const next = SmartGraph.build(data, rows, { src: state.src, max, focus: f });
+      built = { key, focus: fid };
+      G.set(next, { focus: fid });
+      renderGraphStat(next);
+    } else {
+      G.focus(fid);
+      renderGraphStat(g);
+    }
+  }
+  function revealRow() {
+    const box = F('moRows');
+    const el = [...box.querySelectorAll('[data-mo-t], [data-mo-p]')].find(x => (x.dataset.moT || x.dataset.moP) === state.sel);
+    if (!el) return;
+    // Within the list's own scroll, so the page stays where it is.
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (r.top < b.top || r.bottom > b.bottom) box.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+  }
+  function selectFrom(view, id) {
+    state.picked = true;
+    if (state.view !== view) {
+      state.view = view; state.shown = PAGE;
+      if (view === 'people' && state.side === 'agree') state.side = 'all';
+    }
+    state.sel = id;
+    if (view === 'stocks') {
+      const i = stockRows().findIndex(r => r.t === id);
+      if (i >= state.shown) state.shown = Math.ceil((i + 1) / PAGE) * PAGE;
+    }
+    render();
+    revealRow();
+  }
+  function pickNode(n) {
+    if (!n) { state.picked = false; G.focus(null); return; }
+    if (n.type === 'stock') return selectFrom('stocks', n.key);
+    if (n.group) return selectFrom('stocks', n.ticker);
+    const p = (data.people || []).find(x => x.id === n.key);
+    if (p) return selectFrom('people', p.id);
+    const g = G.graph(), l = g.links.find(x => g.nodes[x.b] === n);
+    if (l) selectFrom('stocks', g.nodes[l.a].key);
+  }
+
   // ── wiring ──────────────────────────────────────────────────────────────
   function syncUrl() {
     const u = new URL(location.href);
@@ -424,8 +633,10 @@
     state.sel ? u.searchParams.set('sel', state.sel) : u.searchParams.delete('sel');
     history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
   }
-  function render() {
+  function render(opts) {
     document.querySelectorAll('[data-mo-view]').forEach(b => b.classList.toggle('is-on', b.dataset.moView === state.view));
+    // The zoom buttons' names are their titles, which I18n.apply() sets.
+    document.querySelectorAll('[data-mo-zoom]').forEach(b => b.setAttribute('aria-label', b.title));
     document.querySelectorAll('[data-mo-src]').forEach(b => b.classList.toggle('is-on', state.src.has(b.dataset.moSrc)));
     document.querySelectorAll('[data-mo-side]').forEach(b => {
       b.classList.toggle('is-on', b.dataset.moSide === state.side);
@@ -435,6 +646,7 @@
       F('moSummary').textContent = failed ? tr('smart.failed', 'Smart money is unavailable right now.')
         : polls >= POLLS ? tr('smart.gave_up', 'The filings are still being read. Reload in a few minutes.')
         : polls ? tr('smart.warming', 'Reading the filings for the first time…') : tr('smart.loading', 'Loading…');
+      F('moGraphEmpty').textContent = F('moSummary').textContent;
       return;
     }
     renderSummary();
@@ -442,6 +654,7 @@
     renderDetail(rows);
     renderNote();
     syncUrl();
+    syncGraph(opts && opts.graphSoon);
   }
   function load() {
     clearTimeout(timer);
@@ -457,7 +670,9 @@
   }
   document.addEventListener('click', e => {
     const v = e.target.closest('[data-mo-view]');
-    if (v) { if (state.view !== v.dataset.moView) { state.view = v.dataset.moView; state.sel = ''; state.shown = PAGE; if (state.view === 'people' && state.side === 'agree') state.side = 'all'; render(); } return; }
+    if (v) { if (state.view !== v.dataset.moView) { state.view = v.dataset.moView; state.sel = ''; state.picked = false; state.shown = PAGE; if (state.view === 'people' && state.side === 'agree') state.side = 'all'; render(); } return; }
+    const z = e.target.closest('[data-mo-zoom]');
+    if (z) { if (G) { const k = z.dataset.moZoom; if (k === 'fit') G.fit(); else G.zoom(k === 'in' ? 1.3 : 1 / 1.3); } return; }
     const s = e.target.closest('[data-mo-src]');
     if (s) {
       const k = s.dataset.moSrc;
@@ -469,13 +684,18 @@
     const row = e.target.closest('[data-mo-t], [data-mo-p]');
     if (row && data && !e.target.closest('a')) {
       state.sel = row.dataset.moT || row.dataset.moP;
-      renderDetail([]); syncUrl();
+      state.picked = true;
+      renderDetail([]); syncUrl(); syncGraph();
       if (window.matchMedia('(max-width: 999px)').matches) F('moDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
   F('moMore').addEventListener('click', () => { state.shown += PAGE; render(); });
-  F('moSearch').addEventListener('input', () => { state.shown = PAGE; if (data) render(); });
-  document.addEventListener('i18n:langchange', () => render());
+  // Typing redraws the table at once and the network once the typing stops.
+  F('moSearch').addEventListener('input', () => { state.shown = PAGE; if (data) render({ graphSoon: true }); });
+  document.addEventListener('i18n:langchange', () => { render(); if (G) G.redraw(); });
+  // A narrower network draws fewer stocks (SmartGraph.maxStocks).
+  let resizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => syncGraph(), 200); });
   render();
   load();
 })();
