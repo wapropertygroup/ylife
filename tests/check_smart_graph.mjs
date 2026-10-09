@@ -274,6 +274,10 @@ console.log('labels');
 console.log('small pieces');
 {
   t('the stocks drawn shrink with the width', SG.maxStocks(390) < SG.maxStocks(700) && SG.maxStocks(700) < SG.maxStocks(1100));
+  t('a laptop draws what it did before the bigger view', SG.maxStocks(1010, 560) === 44 && SG.maxStocks(806, 560) === 35);
+  t('the bigger view draws more', SG.maxStocks(1024, 830) > SG.maxStocks(1010, 560), `${SG.maxStocks(1024, 830)}`);
+  t('a phone gets a floor and a huge screen a ceiling',
+    SG.maxStocks(358, 400) === SG.MIN_STOCKS && SG.maxStocks(3840, 2000) === SG.MAX_STOCKS);
   t('a share class keeps its letter, an exchange suffix goes', SG.tickerLabel('BRK-B') === 'BRK-B' && SG.tickerLabel('7203.T') === '7203');
   t('a colour at an alpha', SG.rgba('#34d399', 0.5) === 'rgba(52,211,153,0.5)' && SG.rgba('#fff', 0) === 'rgba(255,255,255,0)');
   t('Chinese text is told from Latin', SG.hasCJK('英伟达') && !SG.hasCJK('Meta') && !SG.hasCJK(''));
@@ -286,8 +290,13 @@ console.log('the page wires it');
   t('it mounts with every hook the module calls', ['onPick', 'tooltip', 'label', 'sub'].every(k => new RegExp(`SmartGraph\\.mount\\([^)]*\\b${k}:`).test(tpl)));
   t('it builds from the table’s own rows', /SmartGraph\.build\(data, rows,/.test(tpl) && /const g = G\.graph\(\), rows = stockRows\(\)/.test(tpl));
   t('an insider pick lights their company’s insiders', tpl.includes("'p:ins@' + f.ticker"));
-  t('the sort decides what the graph ranks by', /rank: state\.sort === 'amount' \? 'amount' : 'people'/.test(tpl)
-    && /state\.side, state\.sort,/.test(tpl));
+  t('the sort decides what the graph ranks by', /const rank = state\.sort === 'amount' \? 'amount' : 'people'/.test(tpl)
+    && /state\.side, rank,/.test(tpl) && /focus: f, rank \}/.test(tpl));
+  t('how many stocks fit is measured on the stage, both ways', /maxStocks\(stage\.clientWidth \|\| 800, stage\.clientHeight \|\| 560\)/.test(tpl));
+  t('every column of the table sorts', ['ticker', 'default', 'amount', 'latest'].every(k => tpl.includes(`th('${k}'`))
+    && /SRC\.map\(s => th\(s,/.test(tpl));
+  t('the bigger view is a button, and Esc leaves it', /data-mo-big/.test(tpl) && /e\.key === 'Escape' && state\.big/.test(tpl));
+  t('a reader behind the wall is shown the offer, not the bigger view', /if \(on && walled\(\)\)/.test(tpl));
   t('lit amounts come from the page', /amount: linkAmount/.test(tpl));
   t('the empty note can hide (its display would beat [hidden])', /\.mo-g-empty\[hidden\]\s*\{\s*display:\s*none/.test(tpl));
 }

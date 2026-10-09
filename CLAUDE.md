@@ -3061,6 +3061,15 @@ It has its own tab (Insiders, after Earnings) since 2026-10-08, and is linked
 from the mobile drawer and both footers. `held` comes from `/assets`, best
 effort.
 
+**Every column of the table sorts** (asked 2026-10-09). A header click sorts
+by it and a second reverses it (`?col=&dir=`). The Largest and Newest chips
+are the value and date columns, largest or newest first. The sort runs in the
+browser over the rows the feed sent. The feed is cut at `MAX_FEED_ROWS`
+(1,500) in its own order, so a date sort asks it for the newest and every
+other column for the largest, and the cut, when there is one, still says
+which. A missing figure (an unpriced trade) sorts last either way. The
+company look-up's table sorts the same way.
+
 Tests: `tests/test_insiders.py` (68, on 26 real Form 4s fetched from the box,
 in `tests/fixtures/insiders/`, with each filing's listing row in `index.json`)
 and `tests/check_insiders_endpoints.py` (15, hermetic). Not a DynamoDB table:
@@ -3197,12 +3206,15 @@ A canvas over the table, drawn by `static/smart_graph.js` from the same
 payload: beside the panel from 1000px, above it on a phone (grid areas), so a
 tap's answer is under the picture.
 - **What it draws.** A stock is a disc whose ring has three arcs, 13F from 12
-  o'clock, then insiders, then House, each in its source's side colour; two or
-  more agreeing also glows. A person is a dot coloured by kind. A link is
+  o'clock, then insiders, then House. Each arc is split green and red by the
+  dollars its source bought and sold (asked 2026-10-09: "drawn on amount
+  instead of persons"); one with no dollars, holds only, keeps its side's
+  colour. Two or more agreeing, by the table's count rule, also glows. A person is a dot coloured by kind. A link is
   coloured by what they did, dashed where it sets no side (a hold, a 10b5-1
   plan sale, an offering), and a dot runs along it the way the money went.
 - **What goes in.** The table's own filters, then the stocks with the most
-  people on them (44, 34 or 22 by width, `MAX_STOCKS`), not the table's
+  people on them, about one per 12,800 px² of canvas (`maxStocks`: 44 on a
+  laptop, 18 at least, 90 at most), not the table's
   agreement-first order, which left out every mega-cap hub. A pick always gets
   in: a stock, or every stock a picked person moved (`focusRows`). A hold only
   joins a manager and a stock already drawn.
@@ -3237,6 +3249,19 @@ tap's answer is under the picture.
   person each stock. The table has an Amount column. A sort chip (默认 · 按金额
   · 按人数, `?sort=`) orders the table, the people, the panel's lists and the
   graph's cut, and by amount the discs are sized by dollars too.
+- **Every column sorts** (asked the same day). A header click sorts by it and
+  a second reverses it (`?sort=ticker|funds|insiders|house|amount|latest&dir=`).
+  A source's column sorts by its trades, buys and sells together. A name opens
+  A to Z, a figure or a date largest or newest first, and a missing figure
+  sorts last either way. 是否同向 is the server's own order, agreement first.
+- **The bigger view** (大图, `?big=1`). The network and the panel cover the
+  whole window, and the filters move in above the network, a comment node
+  holding their place. Esc or the button brings the page back. The extra
+  canvas draws more stocks by the area rule above. On a phone it is one
+  scrolling column, a block rather than a grid: grid rows in a scrolling box
+  shrink to their minimum and folded the network to 2px. A reader behind
+  trade-agents.com's reading wall is scrolled to the wall's offer instead,
+  since the view would lift everything the wall covers.
 - **Tests.** `node tests/check_smart_graph.mjs` (76: the joins, the cut, picks,
   holds, amounts and the amount ranking, old payloads, determinism, overlaps,
   labels, the page's wiring); `MoneyMovedTests` in `tests/test_sec13f.py`.

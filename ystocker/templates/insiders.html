@@ -63,6 +63,13 @@
   .in-row:hover { background: var(--t-surface-alt); }
   .in-num { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--t-ink); white-space: nowrap; }
   .in-head .in-num { font-size: 10.5px; color: var(--t-ink-dim); }
+  /* Every column sorts (asked 2026-10-09): a button that looks like its header. */
+  .in-th { all: unset; display: block; box-sizing: border-box; cursor: pointer; white-space: nowrap; min-width: 0;
+           overflow: hidden; text-overflow: ellipsis; }
+  .in-th:hover, .in-th.is-on { color: var(--t-ink-strong); }
+  .in-th:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; border-radius: 4px; }
+  .in-num .in-th { text-align: right; }
+  .in-th-ar { margin-left: 3px; font-size: 9px; }
   .in-date { min-width: 0; font-size: 12.5px; color: var(--t-ink-strong); font-variant-numeric: tabular-nums; }
   .in-when { white-space: nowrap; }
   .in-sub { display: block; font-size: 10.5px; color: var(--t-ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -207,6 +214,32 @@
     days: pick(params.get('days'), ['7', '30', '90'], '30'),
     sort: pick(params.get('sort'), ['value', 'newest'], 'value'),
   };
+  // The table's column sort, over the rows the feed sent. The feed itself is
+  // ordered by value or by date (``sort``), which matters only when it is cut
+  // at MAX_FEED_ROWS, so a date sort asks for the newest and every other
+  // column for the largest.
+  const COLS = ['date', 'company', 'insider', 'shares', 'price', 'value', 'stake'];
+  const colDir = c => (c === 'company' || c === 'insider' ? 'asc' : 'desc');
+  state.col = pick(params.get('col'), COLS, state.sort === 'newest' ? 'date' : 'value');
+  state.dir = pick(params.get('dir'), ['asc', 'desc'], colDir(state.col));
+  const COL_KEY = {
+    date: r => (r.d || '') + '|' + (r.f || ''),
+    company: r => r.t || null,
+    insider: r => r.o || null,
+    shares: r => (typeof r.sh === 'number' ? r.sh : null),
+    price: r => (typeof r.px === 'number' ? r.px : null),
+    value: r => (typeof r.v === 'number' ? r.v : null),
+    stake: r => (typeof r.sp === 'number' ? r.sp : null),
+  };
+  function ordered(rows) {
+    const f = COL_KEY[state.col], sign = state.dir === 'asc' ? 1 : -1;
+    return rows.map((r, i) => [f(r), i, r]).sort((a, b) => {
+      // A missing figure sorts last whichever way the sort runs.
+      if (a[0] == null || b[0] == null) return (a[0] == null) - (b[0] == null) || a[1] - b[1];
+      const c = typeof a[0] === 'string' ? a[0].localeCompare(b[0]) : a[0] - b[0];
+      return sign * c || a[1] - b[1];
+    }).map(x => x[2]);
+  }
   let data = null, polls = 0, timer = null, failed = false, shown = PAGE;
   let onlyFollowed = false, onlyHeld = false;
   let lookup = null;                         // {t, status, body, polls, timer}
@@ -301,10 +334,14 @@
   }
 
   function header() {
-    const c = (k, f, cls) => `<span class="${cls || ''}">${esc(tr(k, f))}</span>`;
-    return `<div class="in-head">${c('insiders.col_date', 'Date')}${c('insiders.col_company', 'Company')}${c('insiders.col_insider', 'Insider')}
-      ${c('insiders.col_shares', 'Shares', 'in-num in-hide-md')}${c('insiders.col_price', 'Price', 'in-num in-hide-md')}
-      ${c('insiders.col_value', 'Value', 'in-num')}${c('insiders.col_stake', 'Stake', 'in-num')}</div>`;
+    const c = (col, k, f, cls) => {
+      const on = state.col === col, arrow = on ? (state.dir === 'asc' ? '▲' : '▼') : '';
+      return `<span class="${cls || ''}"><button type="button" class="in-th${on ? ' is-on' : ''}" data-in-col="${col}" aria-pressed="${on}"`
+        + ` title="${esc(tr('insiders.sort_by', 'Sort by this column; again for the other way'))}">${esc(tr(k, f))}<span class="in-th-ar" aria-hidden="true">${arrow}</span></button></span>`;
+    };
+    return `<div class="in-head">${c('date', 'insiders.col_date', 'Date')}${c('company', 'insiders.col_company', 'Company')}${c('insider', 'insiders.col_insider', 'Insider')}
+      ${c('shares', 'insiders.col_shares', 'Shares', 'in-num in-hide-md')}${c('price', 'insiders.col_price', 'Price', 'in-num in-hide-md')}
+      ${c('value', 'insiders.col_value', 'Value', 'in-num')}${c('stake', 'insiders.col_stake', 'Stake', 'in-num')}</div>`;
   }
 
   function context() {
@@ -370,7 +407,7 @@
   }
 
   function renderTable(ctx) {
-    const rows = visible(data.rows || [], ctx);
+    const rows = ordered(visible(data.rows || [], ctx));
     const list = F('inList'), empty = F('inEmpty'), more = F('inMore');
     const meta = [plural(rows.length, 'insiders.count_one', 'insiders.count_many', '{n} trade', '{n} trades')];
     if (data.truncated) meta.push(fill(tr('insiders.truncated', 'the first {n} of {m} by this order'), { n: (data.rows || []).length.toLocaleString(), m: data.total.toLocaleString() }));
@@ -428,7 +465,7 @@
       if (!b.followed) notes.push(tr('insiders.not_followed', 'Not followed here: refreshed when looked up.'));
       if (others) notes.push(plural(others, 'insiders.others_one', 'insiders.others_many', '{n} other transaction (an award, exercise, tax withholding or gift) is on its filings.', '{n} other transactions (awards, exercises, tax withholding, gifts) are on its filings.'));
       const ctx = { followed: new Set(b.followed ? [t] : []), held: new Set(b.held ? [t] : []), markFollowed: false };
-      inner = rows.length ? `<div class="in-list">${header()}${rows.map(r => row(r, ctx)).join('')}</div>`
+      inner = rows.length ? `<div class="in-list">${header()}${ordered(rows).map(r => row(r, ctx)).join('')}</div>`
         : `<p class="in-empty">${esc(fill(tr('insiders.lookup_none', 'No open-market trades of this kind at {t} in the last {d} days.'), { t, d: b.days || 90 }))}</p>`;
       inner += notes.length ? `<p class="in-note">${esc(notes.join(' '))}</p>` : '';
     } else {
@@ -474,13 +511,18 @@
     u.searchParams.set('kind', state.kind);
     u.searchParams.set('days', state.days);
     u.searchParams.set('sort', state.sort);
+    // The two columns the chips stand for need no more than ``sort``.
+    const plain = state.col === (state.sort === 'newest' ? 'date' : 'value');
+    plain ? u.searchParams.delete('col') : u.searchParams.set('col', state.col);
+    state.dir !== colDir(state.col) ? u.searchParams.set('dir', state.dir) : u.searchParams.delete('dir');
     history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
   }
 
   function render() {
     document.querySelectorAll('[data-in-kind]').forEach(b => b.classList.toggle('is-on', b.dataset.inKind === state.kind));
     document.querySelectorAll('[data-in-days]').forEach(b => b.classList.toggle('is-on', b.dataset.inDays === state.days));
-    document.querySelectorAll('[data-in-sort]').forEach(b => b.classList.toggle('is-on', b.dataset.inSort === state.sort));
+    document.querySelectorAll('[data-in-sort]').forEach(b => b.classList.toggle('is-on',
+      state.dir === 'desc' && state.col === (b.dataset.inSort === 'newest' ? 'date' : 'value')));
     renderLookup();
     if (!data) {
       F('inSummary').textContent = failed ? tr('insiders.failed', 'Insider trades are unavailable right now.')
@@ -529,7 +571,22 @@
     const d = e.target.closest('[data-in-days]');
     if (d) return choose('days', d.dataset.inDays);
     const s = e.target.closest('[data-in-sort]');
-    if (s) return choose('sort', s.dataset.inSort);
+    if (s) {
+      state.col = s.dataset.inSort === 'newest' ? 'date' : 'value';
+      state.dir = 'desc';
+      if (state.sort === s.dataset.inSort) { shown = PAGE; render(); return; }
+      return choose('sort', s.dataset.inSort);
+    }
+    // A column's header sorts by it; again, the other way.
+    const h = e.target.closest('[data-in-col]');
+    if (h) {
+      const col = h.dataset.inCol;
+      if (state.col === col) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+      else { state.col = col; state.dir = colDir(col); }
+      const want = col === 'date' ? 'newest' : 'value';
+      if (state.sort !== want) return choose('sort', want);
+      shown = PAGE; render(); return;
+    }
     if (e.target.closest('[data-in-close]')) { if (lookup && lookup.timer) clearTimeout(lookup.timer); lookup = null; render(); }
   });
   F('inFollowed').addEventListener('click', () => { onlyFollowed = !onlyFollowed; shown = PAGE; render(); });

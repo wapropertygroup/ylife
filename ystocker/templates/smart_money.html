@@ -162,6 +162,34 @@
   .mo-g-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
   .mo-g-dot.fund { background: var(--mo-g-fund); } .mo-g-dot.insider { background: var(--mo-g-insider); } .mo-g-dot.house { background: var(--mo-g-house); }
   .mo-g-ring { width: 16px; height: 16px; flex: none; }
+  .mo-g-big { width: auto; padding: 0 9px; gap: 5px; font-size: 12px; font-weight: 600; }
+  .mo-g-big svg { flex: none; }
+  /* Sortable headers: a button that looks like the header it is. */
+  .mo-th { all: unset; display: block; box-sizing: border-box; cursor: pointer; white-space: nowrap; min-width: 0;
+           overflow: hidden; text-overflow: ellipsis; }
+  .mo-th:hover, .mo-th.is-on { color: var(--t-ink-strong); }
+  .mo-th:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; border-radius: 4px; }
+  .mo-th-ar { margin-left: 3px; font-size: 9px; }
+  /* The bigger view (asked 2026-10-09): the network and the panel over the
+     whole window, with the filters moved in above the network. */
+  .mo-main.is-big { position: fixed; inset: 0; z-index: 90; margin: 0; padding: 12px; gap: 12px;
+                    background: var(--t-surface-deep); grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+                    grid-template-rows: minmax(0, 1fr); grid-template-areas: "graph detail"; }
+  .mo-main.is-big .mo-list { display: none; }
+  .mo-main.is-big .mo-graph { display: flex; flex-direction: column; min-height: 0; }
+  .mo-main.is-big .mo-graph > .mo-controls { margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--t-line); }
+  .mo-main.is-big .mo-g-stage { flex: 1 1 auto; height: auto; min-height: 0; }
+  .mo-main.is-big .mo-detail { position: static; top: auto; max-height: none; height: 100%; overflow-y: auto; }
+  /* On a phone, the network and then the panel, scrolling as one column: a
+     block, because grid rows in a scrolling box shrink to their minimum and
+     folded the network to nothing. */
+  @media (max-width: 999px) {
+    .mo-main.is-big { display: block; overflow-y: auto; padding: 8px; }
+    .mo-main.is-big .mo-graph { display: block; }
+    .mo-main.is-big .mo-g-stage { height: calc(100vh - 210px); height: calc(100dvh - 210px); min-height: 320px; }
+    .mo-main.is-big .mo-detail { height: auto; overflow: visible; margin-top: 8px; }
+  }
+  html.mo-big-open, html.mo-big-open body { overflow: hidden; }
   .mo-g-hint { flex-basis: 100%; color: var(--t-ink-dim); }
 </style>
 
@@ -205,6 +233,7 @@
         <button type="button" class="mo-g-btn" data-mo-zoom="in" data-i18n-title="smart.g_zoom_in" title="Zoom in">+</button>
         <button type="button" class="mo-g-btn" data-mo-zoom="out" data-i18n-title="smart.g_zoom_out" title="Zoom out">−</button>
         <button type="button" class="mo-g-btn" data-mo-zoom="fit" data-i18n-title="smart.g_fit" title="Show everything">⤢</button>
+        <button type="button" class="mo-g-btn mo-g-big" data-mo-big aria-pressed="false" title="See the network bigger"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="mo-g-big-l">Bigger</span></button>
       </span>
     </div>
     <div id="moGraph" class="mo-g-stage" role="img"><p id="moGraphEmpty" class="mo-g-empty" data-i18n="smart.loading">Loading…</p></div>
@@ -217,9 +246,11 @@
       <span><i class="mo-g-dot insider"></i><span data-i18n="smart.src_insiders">Insiders</span></span>
       <span><i class="mo-g-dot house"></i><span data-i18n="smart.src_house">House members</span></span>
       <span><svg class="mo-g-ring" viewBox="0 0 16 16" aria-hidden="true"><g fill="none" stroke-width="2.6">
-        <path d="M8.51 2.22 A5.8 5.8 0 0 1 13.26 10.45" stroke="var(--mo-up)"/>
+        <path d="M8.51 2.22 A5.8 5.8 0 0 1 13.74 7.19" stroke="var(--mo-up)"/>
+        <path d="M13.74 7.19 A5.8 5.8 0 0 1 13.26 10.45" stroke="var(--mo-down)"/>
         <path d="M12.75 11.33 A5.8 5.8 0 0 1 3.25 11.33" stroke="var(--mo-down)"/>
-        <path d="M2.74 10.45 A5.8 5.8 0 0 1 7.49 2.22" stroke="var(--mo-g-hold)"/></g></svg><span data-i18n="smart.g_ring">ring, clockwise from 12: 13F · insiders · House</span></span>
+        <path d="M2.74 10.45 A5.8 5.8 0 0 1 2.98 5.10" stroke="var(--mo-up)"/>
+        <path d="M2.98 5.10 A5.8 5.8 0 0 1 7.49 2.22" stroke="var(--mo-down)"/></g></svg><span data-i18n="smart.g_ring">ring, clockwise from 12: 13F · insiders · House, each split by dollars bought and sold</span></span>
       <span class="mo-g-hint" data-i18n="smart.g_hint">A thicker line moved more money, and its dots run the way it went: into a stock on a buy, out of it on a sale. Click a stock or a person to see the amounts; drag one to move it; hold ⌘ or Ctrl and scroll to zoom.</span>
     </div>
   </section>
@@ -262,7 +293,9 @@
   const state = {
     view: pick(params.get('view'), ['stocks', 'people'], 'stocks'),
     side: pick(params.get('side'), ['all', 'agree', 'buy', 'sell'], 'all'),
-    sort: pick(params.get('sort'), ['default', 'amount', 'people'], 'default'),
+    sort: pick(params.get('sort'), ['default', 'amount', 'people', 'ticker', 'funds', 'insiders', 'house', 'latest'], 'default'),
+    dir: 'desc',                   // set below, from ?dir= or the column's own default
+    big: params.get('big') === '1',
     src: new Set((params.get('src') || SRC.join(',')).split(',').filter(s => SRC.indexOf(s) >= 0)),
     sel: params.get('sel') || '',
     // The panel always shows something, the first row if nothing was picked;
@@ -271,6 +304,8 @@
     shown: PAGE,
   };
   if (!state.src.size) SRC.forEach(s => state.src.add(s));
+  // A name opens A to Z, everything else largest or newest first (defaultDir).
+  state.dir = pick(params.get('dir'), ['asc', 'desc'], state.sort === 'ticker' ? 'asc' : 'desc');
   let data = null, polls = 0, failed = false, timer = null;
 
   const fmtDay = iso => (iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString(zh() ? 'zh-CN' : 'en-US',
@@ -308,12 +343,30 @@
   const peopleOf = r => SRC.reduce((n, k) => n + (state.src.has(k) && r.src[k] ? r.src[k].who.length : 0), 0);
   // Largest first, the table's own order breaking ties.
   const sortBy = (rows, f) => rows.map((r, i) => [f(r), i, r]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(x => x[2]);
-  function stockRows() {
-    const rows = filteredStocks();
-    if (state.sort === 'amount') return sortBy(rows, r => { const a = amountOf(r); return a.b + a.s; });
-    if (state.sort === 'people') return sortBy(rows, peopleOf);
-    return rows;
+  // The table's columns, each a sort (asked 2026-10-09). A source's column
+  // sorts by its trades, buys and sells together. "default" is the server's
+  // order: agreement first, then people, then latest.
+  const srcMoves = (r, k) => { const x = state.src.has(k) && r.src[k]; return x ? (x.buy || 0) + (x.sell || 0) : null; };
+  const SORTS = {
+    amount: r => { const a = amountOf(r); return a.b + a.s || null; },
+    people: r => peopleOf(r) || null,
+    ticker: r => r.t,
+    funds: r => srcMoves(r, 'funds'), insiders: r => srcMoves(r, 'insiders'), house: r => srcMoves(r, 'house'),
+    latest: r => r.latest || null,
+  };
+  // A name reads A to Z first; every figure and date largest or newest first.
+  const defaultDir = k => (k === 'ticker' ? 'asc' : 'desc');
+  function ordered(rows, key, dir) {
+    if (!SORTS[key]) return dir === 'asc' ? rows.slice().reverse() : rows;
+    const f = SORTS[key], sign = dir === 'asc' ? 1 : -1;
+    return rows.map((r, i) => [f(r), i, r]).sort((a, b) => {
+      // A missing figure sorts last whichever way the sort runs.
+      if (a[0] == null || b[0] == null) return (a[0] == null) - (b[0] == null) || a[1] - b[1];
+      const c = typeof a[0] === 'string' ? a[0].localeCompare(b[0]) : a[0] - b[0];
+      return sign * c || a[1] - b[1];
+    }).map(x => x[2]);
   }
+  const stockRows = () => ordered(filteredStocks(), state.sort, state.dir);
   function filteredStocks() {
     const q = F('moSearch').value.trim().toLowerCase();
     const names = data.names || {};
@@ -359,10 +412,15 @@
   }
   function renderStocks() {
     const rows = stockRows();
-    F('moHead').innerHTML = `<div class="mo-thead"><span>${esc(tr('smart.col_stock', 'Stock'))}</span><span>${esc(tr('smart.col_agree', 'Same way?'))}</span>`
-      + SRC.map(s => `<span style="text-align:center">${esc(tr(SRC_SHORT[s], s))}</span>`).join('')
-      + `<span style="text-align:right" title="${esc(tr('smart.amount_title', ''))}">${esc(tr('smart.col_amount', 'Amount'))}</span>`
-      + `<span style="text-align:right">${esc(tr('smart.col_latest', 'Latest'))}</span></div>`;
+    const th = (key, label, align, title) => {
+      const on = state.sort === key, arrow = on ? (state.dir === 'asc' ? '▲' : '▼') : '';
+      return `<button type="button" class="mo-th${on ? ' is-on' : ''}" data-mo-col="${key}" style="text-align:${align}"`
+        + ` title="${esc(title || tr('smart.sort_by', 'Sort by this column'))}" aria-pressed="${on}">${esc(label)}<span class="mo-th-ar" aria-hidden="true">${arrow}</span></button>`;
+    };
+    F('moHead').innerHTML = `<div class="mo-thead">${th('ticker', tr('smart.col_stock', 'Stock'), 'left')}${th('default', tr('smart.col_agree', 'Same way?'), 'left')}`
+      + SRC.map(s => th(s, tr(SRC_SHORT[s], s), 'center')).join('')
+      + th('amount', tr('smart.col_amount', 'Amount'), 'right', tr('smart.amount_title', ''))
+      + th('latest', tr('smart.col_latest', 'Latest'), 'right') + '</div>';
     F('moRows').classList.toggle('is-by-amount', state.sort === 'amount');
     if (!rows.length) { F('moRows').innerHTML = `<p class="mo-empty">${esc(tr('smart.none', 'Nothing matches.'))}</p>`; F('moMore').hidden = true; return rows; }
     const names = data.names || {};
@@ -379,7 +437,9 @@
   // ── by person ───────────────────────────────────────────────────────────
   function peopleRows() {
     const rows = filteredPeople();
-    return state.sort === 'amount' ? sortBy(rows, p => p.moved || 0) : rows;
+    if (state.sort !== 'amount') return rows;
+    const by = sortBy(rows, p => p.moved || 0);
+    return state.dir === 'asc' ? by.reverse() : by;
   }
   function filteredPeople() {
     const q = F('moSearch').value.trim().toLowerCase();
@@ -655,8 +715,9 @@
     const stage = F('moGraph');
     if (!G) G = SmartGraph.mount(stage, { onPick: pickNode, tooltip: graphTip, label: graphLabel, sub: graphSub, amount: linkAmount });
     const f = picked(), fid = focusNode(f);
-    const max = SmartGraph.maxStocks(stage.clientWidth || 800);
-    const key = JSON.stringify([SRC.filter(s => state.src.has(s)), state.side, state.sort, F('moSearch').value.trim().toLowerCase(),
+    const max = SmartGraph.maxStocks(stage.clientWidth || 800, stage.clientHeight || 560);
+    const rank = state.sort === 'amount' ? 'amount' : 'people';
+    const key = JSON.stringify([SRC.filter(s => state.src.has(s)), state.side, rank, F('moSearch').value.trim().toLowerCase(),
                                 max, data.as_of, data.status, (data.tickers || []).length]);
     const g = G.graph(), rows = stockRows();
     // A pick brings in what it needs -- a stock, or every stock a person
@@ -664,7 +725,7 @@
     // switched on) must not rebuild on every render.
     const missing = !!g && SmartGraph.focusRows(data, rows, f, state.src).some(r => !g.nodes.some(n => n.id === 't:' + r.t));
     if (key !== built.key || !g || (missing && built.focus !== fid)) {
-      const next = SmartGraph.build(data, rows, { src: state.src, max, focus: f, rank: state.sort === 'amount' ? 'amount' : 'people' });
+      const next = SmartGraph.build(data, rows, { src: state.src, max, focus: f, rank });
       built = { key, focus: fid };
       G.set(next, { focus: fid });
       renderGraphStat(next);
@@ -686,7 +747,7 @@
     if (state.view !== view) {
       state.view = view; state.shown = PAGE;
       if (view === 'people' && state.side === 'agree') state.side = 'all';
-      if (view === 'people' && state.sort === 'people') state.sort = 'default';
+      if (view === 'people' && state.sort !== 'amount') { state.sort = 'default'; state.dir = 'desc'; }
     }
     state.sel = id;
     if (view === 'stocks') {
@@ -706,12 +767,55 @@
     if (l) selectFrom('stocks', g.nodes[l.a].key);
   }
 
+  // ── the bigger view ─────────────────────────────────────────────────────
+  // The network and the panel over the whole window, the filters moved in
+  // above the network. Esc, or the button again, brings the page back. On
+  // trade-agents.com a reader behind the reading wall is shown the wall's
+  // offer instead: the view would lift everything the wall covers.
+  const controls = document.querySelector('.mo-controls');
+  const controlsHome = document.createComment('mo-controls');
+  controls.parentNode.insertBefore(controlsHome, controls);
+  function walled() {
+    const w = document.querySelector('[data-wall]');
+    return !!(w && !w.hidden && document.body.classList.contains('w-walled'));
+  }
+  function renderBigButton() {
+    const b = document.querySelector('[data-mo-big]');
+    if (!b) return;
+    b.setAttribute('aria-pressed', String(state.big));
+    b.title = state.big ? tr('smart.g_big_exit', 'Back to the page') : tr('smart.g_big_title', 'See the network bigger');
+    b.setAttribute('aria-label', b.title);
+    b.querySelector('.mo-g-big-l').textContent = state.big ? tr('smart.g_big_exit_l', 'Exit') : tr('smart.g_big', 'Bigger');
+    b.querySelector('path').setAttribute('d', state.big ? 'M4 4l8 8M12 4l-8 8' : 'M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4');
+  }
+  function setBig(on) {
+    if (on && walled()) {
+      const card = document.querySelector('[data-wall] .w-wall-card');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    state.big = !!on;
+    document.querySelector('.mo-main').classList.toggle('is-big', state.big);
+    document.documentElement.classList.toggle('mo-big-open', state.big);
+    const card = document.querySelector('.mo-graph');
+    if (state.big) card.insertBefore(controls, card.firstChild);
+    else controlsHome.parentNode.insertBefore(controls, controlsHome.nextSibling);
+    renderBigButton();
+    if (data) syncUrl();
+    // The canvas follows its new size by itself; how many stocks fit it is
+    // the page's to decide, once the new layout has been measured.
+    requestAnimationFrame(() => requestAnimationFrame(() => syncGraph()));
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.big) setBig(false); });
+
   // ── wiring ──────────────────────────────────────────────────────────────
   function syncUrl() {
     const u = new URL(location.href);
     u.searchParams.set('view', state.view);
     state.side !== 'all' ? u.searchParams.set('side', state.side) : u.searchParams.delete('side');
     state.sort !== 'default' ? u.searchParams.set('sort', state.sort) : u.searchParams.delete('sort');
+    state.dir !== defaultDir(state.sort) ? u.searchParams.set('dir', state.dir) : u.searchParams.delete('dir');
+    state.big ? u.searchParams.set('big', '1') : u.searchParams.delete('big');
     state.src.size < SRC.length ? u.searchParams.set('src', SRC.filter(s => state.src.has(s)).join(',')) : u.searchParams.delete('src');
     state.sel ? u.searchParams.set('sel', state.sel) : u.searchParams.delete('sel');
     history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
@@ -720,6 +824,7 @@
     document.querySelectorAll('[data-mo-view]').forEach(b => b.classList.toggle('is-on', b.dataset.moView === state.view));
     // The zoom buttons' names are their titles, which I18n.apply() sets.
     document.querySelectorAll('[data-mo-zoom]').forEach(b => b.setAttribute('aria-label', b.title));
+    renderBigButton();
     document.querySelectorAll('[data-mo-src]').forEach(b => b.classList.toggle('is-on', state.src.has(b.dataset.moSrc)));
     document.querySelectorAll('[data-mo-side]').forEach(b => {
       b.classList.toggle('is-on', b.dataset.moSide === state.side);
@@ -761,7 +866,7 @@
       if (state.view !== v.dataset.moView) {
         state.view = v.dataset.moView; state.sel = ''; state.picked = false; state.shown = PAGE;
         if (state.view === 'people' && state.side === 'agree') state.side = 'all';
-        if (state.view === 'people' && state.sort === 'people') state.sort = 'default';
+        if (state.view === 'people' && state.sort !== 'amount') { state.sort = 'default'; state.dir = 'desc'; }
         render();
       }
       return;
@@ -777,7 +882,17 @@
     const sd = e.target.closest('[data-mo-side]');
     if (sd) { state.side = sd.dataset.moSide; state.shown = PAGE; render(); return; }
     const so = e.target.closest('[data-mo-sort]');
-    if (so) { state.sort = so.dataset.moSort; state.shown = PAGE; render(); F('moRows').scrollTop = 0; return; }
+    if (so) { state.sort = so.dataset.moSort; state.dir = defaultDir(state.sort); state.shown = PAGE; render(); F('moRows').scrollTop = 0; return; }
+    // A column's header sorts by it; again, the other way.
+    const col = e.target.closest('[data-mo-col]');
+    if (col) {
+      const k = col.dataset.moCol;
+      if (state.sort === k) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+      else { state.sort = k; state.dir = defaultDir(k); }
+      state.shown = PAGE; render(); F('moRows').scrollTop = 0; return;
+    }
+    const bg = e.target.closest('[data-mo-big]');
+    if (bg) { setBig(!state.big); return; }
     const row = e.target.closest('[data-mo-t], [data-mo-p]');
     if (row && data && !e.target.closest('a')) {
       state.sel = row.dataset.moT || row.dataset.moP;
@@ -795,6 +910,11 @@
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => syncGraph(), 200); });
   render();
   load();
+  if (state.big) {
+    state.big = false;
+    const open = () => setBig(true);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', open); else open();
+  }
 })();
 </script>
 {% endblock %}

@@ -4,9 +4,10 @@
  *
  * Stocks and the people who moved them, drawn as one graph. A stock is a disc
  * with a ring of three arcs, one per source -- 13F managers at the top, then
- * insiders, then House members, clockwise -- each in the colour of that
- * source's side, so "two or more agree" reads as two arcs of one colour, and a
- * stock where they do also glows. A person is a dot in the colour of what they
+ * insiders, then House members, clockwise -- each split green and red by the
+ * dollars that source bought and sold, so "two or more agree" reads as two
+ * arcs of one colour, and a stock where they do (by count, the table's rule)
+ * also glows. A person is a dot in the colour of what they
  * are (manager, insider, member). A link is coloured by what that person did
  * to that stock, dashed where it does not set the side (a hold, a 10b5-1 plan
  * sale, a purchase in an offering), and a dot travels along it the way the
@@ -28,9 +29,11 @@
   const SRC = ['funds', 'insiders', 'house'];
   const KIND = { funds: 'fund', insiders: 'insider', house: 'house' };
   const CH_DIR = { new: 'buy', increased: 'buy', reduced: 'sell', unchanged: 'hold' };
-  // How many stocks the graph draws at a given width. Past these it stops
-  // being a picture: at 390px a 44-stock graph is a hairball of labels.
-  const MAX_STOCKS = [[560, 22], [860, 34], [Infinity, 44]];
+  // How many stocks the graph draws: about one per 12,800 px² of canvas -- 44
+  // on a laptop's 1010x560, 35 at 806x560, 66 in the bigger view at 1024x830
+  // -- and never so few that a phone's picture is empty, nor so many it stops
+  // being one (at 390px a 44-stock graph was a hairball of labels).
+  const STOCK_AREA = 12800, MIN_STOCKS = 18, MAX_STOCKS = 90;
   // A focused person's stocks are added to the graph, up to this many.
   const MAX_FOCUS_EXTRA = 30;
 
@@ -54,9 +57,9 @@
     };
   }
 
-  function maxStocks(width) {
-    for (const [w, n] of MAX_STOCKS) if (width < w) return n;
-    return MAX_STOCKS[MAX_STOCKS.length - 1][1];
+  function maxStocks(width, height) {
+    const area = Math.max(1, width || 0) * Math.max(1, height || 560);
+    return clamp(Math.round(area / STOCK_AREA), MIN_STOCKS, MAX_STOCKS);
   }
 
   // ── building ──────────────────────────────────────────────────────────────
@@ -159,12 +162,20 @@
 
     const nodes = [], links = [], index = new Map();
     chosen.forEach(r => {
-      const arcs = {};
-      SRC.forEach(s => { arcs[s] = src.indexOf(s) >= 0 ? arcOf(r.src[s]) : null; });
+      const arcs = {}, split = {};
+      SRC.forEach(s => {
+        const on = src.indexOf(s) >= 0, x = r.src[s];
+        arcs[s] = on ? arcOf(x) : null;
+        // Each third is split green and red by the dollars bought and sold
+        // (asked 2026-10-09: "drawn on amount instead of persons"); a third
+        // with no dollars keeps its side's colour.
+        const b = on && x ? x.bought || 0 : 0, sold = on && x ? x.sold || 0 : 0;
+        split[s] = b + sold > 0 ? b / (b + sold) : null;
+      });
       const agree = agreeOn(r, src);
       index.set('t:' + r.t, nodes.length);
       const amt = amountOn(r, src);
-      nodes.push({ id: 't:' + r.t, type: 'stock', key: r.t, row: r, arcs,
+      nodes.push({ id: 't:' + r.t, type: 'stock', key: r.t, row: r, arcs, split,
                    agree: agree ? agree.side : null, split: !!r.split, moves: peopleOn(r, src), deg: 0,
                    bought: amt.b, sold: amt.s, amount: amt.b + amt.s });
     });
@@ -740,9 +751,16 @@
         const lw = Math.max(2.6, r * 0.22);
         SRC.forEach(s => {
           const a0 = ARC_START[s] + ARC_GAP / 2, a1 = ARC_START[s] + Math.PI * 2 / 3 - ARC_GAP / 2;
-          const side = n.arcs[s];
-          ctx.strokeStyle = side ? (P[side] || P.none) : P.track;
+          const side = n.arcs[s], f = n.split ? n.split[s] : null;
           ctx.lineWidth = side ? lw : lw * 0.55;
+          if (side && f != null) {
+            // Bought, clockwise from the third's start, then sold.
+            const mid = a0 + (a1 - a0) * f;
+            if (f > 0) { ctx.strokeStyle = P.buy; ctx.beginPath(); ctx.arc(x, y, r - lw / 2, a0, mid); ctx.stroke(); }
+            if (f < 1) { ctx.strokeStyle = P.sell; ctx.beginPath(); ctx.arc(x, y, r - lw / 2, mid, a1); ctx.stroke(); }
+            return;
+          }
+          ctx.strokeStyle = side ? (P[side] || P.none) : P.track;
           ctx.beginPath(); ctx.arc(x, y, r - lw / 2, a0, a1); ctx.stroke();
         });
         const label = tickerLabel(n.key);
@@ -967,7 +985,7 @@
     return api;
   }
 
-  const api = { build, focusRows, amountOn, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS };
+  const api = { build, focusRows, amountOn, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS, MIN_STOCKS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SmartGraph = api;
 })(typeof window !== 'undefined' ? window : globalThis);
