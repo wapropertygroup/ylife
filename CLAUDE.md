@@ -3262,9 +3262,10 @@ tap's answer is under the picture.
   shrink to their minimum and folded the network to 2px. A reader behind
   trade-agents.com's reading wall is scrolled to the wall's offer instead,
   since the view would lift everything the wall covers.
-- **Tests.** `node tests/check_smart_graph.mjs` (76: the joins, the cut, picks,
-  holds, amounts and the amount ranking, old payloads, determinism, overlaps,
-  labels, the page's wiring); `MoneyMovedTests` in `tests/test_sec13f.py`.
+- **Tests.** `node tests/check_smart_graph.mjs` (83: the joins, the cut, picks,
+  holds, amounts and the amount ranking, the area rule, old payloads,
+  determinism, overlaps, labels, the page's wiring, its sortable headers and
+  the bigger view); `MoneyMovedTests` in `tests/test_sec13f.py`.
 
 ### Prediction markets (`/predictions`)
 
