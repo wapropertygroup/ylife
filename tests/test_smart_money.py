@@ -234,6 +234,31 @@ class WhoTests(unittest.TestCase):
         self.assertTrue(nvda["Huang Jensen"]["plan"])
         self.assertTrue(rows["HLT"]["src"]["insiders"]["who"][0]["offering"])
 
+    def test_amounts_travel_with_each_entry_and_add_up_per_source(self):
+        holdings = {"Berkshire Hathaway": _fund([dict(_h("GOOGL", "increased", 12.6, 45.2), value_millions=1450.0,
+                                                      shares=1450, change_shares=450),
+                                                 dict(_h("BAC", "reduced", 9.2, -5.9), value_millions=900.0,
+                                                      shares=900, change_shares=-100),
+                                                 dict(_h("AAPL", "unchanged", 22.0), value_millions=5000.0)])}
+        funds = sm.fund_people(holdings)
+        acts = {a["t"]: a for a in funds[0]["actions"]}
+        self.assertEqual((acts["GOOGL"]["v"], acts["BAC"]["v"], acts["AAPL"]["v"]), (450_000_000, -100_000_000, None))
+        self.assertEqual(funds[0]["moved"], 550_000_000)          # a person's dollars moved, both ways
+        house = [HOUSE[0], dict(HOUSE[0], k="sell", dir="sell", lo=1001, hi=15000, d="2026-07-30", doc="20035999")]
+        rows = {r["t"]: r for r in sm.tickers_view(funds, INSIDERS, house, SINCE)}
+        g = rows["GOOGL"]["src"]["funds"]
+        self.assertEqual((g["bought"], g["sold"], g["who"][0]["v"], g["who"][0]["pct"]), (450_000_000, 0, 450_000_000, 45.2))
+        self.assertEqual(rows["BAC"]["src"]["funds"]["sold"], 100_000_000)
+        ins = rows["NVDA"]["src"]["insiders"]
+        # A plan sale is money moved; it is the side it does not set.
+        self.assertEqual((ins["bought"], ins["sold"]), (500_000, 9_000_000))
+        self.assertEqual({w["name"]: w["v"] for w in ins["who"]}, {"Doe Jane": 500_000, "Huang Jensen": -9_000_000})
+        hou = rows["NVDA"]["src"]["house"]
+        pelosi = hou["who"][0]
+        self.assertEqual((pelosi["lo"], pelosi["hi"]), (1000001 + 1001, 5000000 + 15000))   # the ranges, summed
+        self.assertEqual(pelosi["v"], round((1000001 + 5000000) / 2 - (1001 + 15000) / 2))   # midpoints, net
+        self.assertEqual((hou["bought"], hou["sold"]), (round((1000001 + 5000000) / 2), round((1001 + 15000) / 2)))
+
     def test_the_index_behind_the_lists_is_not_in_the_payload(self):
         for row in sm.tickers_view(sm.fund_people(HOLDINGS), INSIDERS, HOUSE, SINCE):
             for x in row["src"].values():

@@ -8218,23 +8218,7 @@ def thirteenf():
     buy_increased_count: dict[str, int] = defaultdict(int)
     buy_new_value: dict[str, float] = defaultdict(float)
 
-    def _added_m(h: dict) -> Optional[float]:
-        v = h.get("value_millions") or 0
-        change = h.get("change")
-        if change == "new":
-            return float(v)
-        if change == "unchanged":
-            return 0.0
-        if change in ("increased", "reduced"):
-            shares = h.get("shares") or 0
-            delta = h.get("change_shares")
-            pct = h.get("change_pct")
-            if delta is None and pct is not None and shares and pct > -100:
-                delta = shares - shares / (1 + pct / 100)
-            if delta is None or not shares:
-                return None
-            return float(v) * delta / shares
-        return None                      # "unknown": an implausible swing
+    from ystocker.sec13f import money_moved_m as _added_m   # "unknown" is None
 
     for fund_name, fd in holdings.items():
         if not isinstance(fd, dict) or fd.get("error"):

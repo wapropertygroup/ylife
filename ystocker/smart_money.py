@@ -39,6 +39,9 @@ What the filings cannot say
   insider's view today, so plan trades are listed but do not set the insiders'
   direction. Neither does a purchase in an offering.
 * A House trade's amount is a range; sums are of range midpoints and say so.
+* A 13F's amount is the shares added or trimmed at the quarter-end price
+  (sec13f.money_moved_m, the rule /13f's money-moved columns use), not what
+  the fund paid; an insider's is the filed value of each trade.
 * None of it is real time, and none of it is advice.
 
 Pure: data in, payload out. The route gathers the three inputs from their
@@ -49,6 +52,8 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 from typing import Any, Iterable, Optional
+
+from ystocker.sec13f import money_moved_m
 
 #: Fund name in sec13f.FUNDS -> (person, Chinese name, "runs" or "founded").
 #: "founded" where the person no longer runs it (Dalio, Soros): the filing is
@@ -146,8 +151,10 @@ def fund_people(holdings: dict[str, dict[str, Any]], people: Optional[dict] = No
         actions = []
         for h in q.get("holdings") or ():
             ch = h.get("change")
+            moved_m = money_moved_m(h) if ch in ("new", "increased", "reduced") else None
             actions.append({"t": h.get("ticker"), "n": h.get("name"), "ch": ch, "dir": _CHANGE_DIR.get(ch),
-                            "pct": h.get("change_pct"), "w": h.get("pct_portfolio"), "rank": h.get("rank")})
+                            "pct": h.get("change_pct"), "w": h.get("pct_portfolio"), "rank": h.get("rank"),
+                            "v": round(moved_m * 1e6) if moved_m is not None else None})
         buys = sum(1 for a in actions if a["dir"] == "buy")
         sells = sum(1 for a in actions if a["dir"] == "sell")
         moved = [a for a in actions if a["dir"] in ("buy", "sell")]
@@ -157,6 +164,7 @@ def fund_people(holdings: dict[str, dict[str, Any]], people: Optional[dict] = No
             "lag": _days(q.get("period"), q.get("filing_date")),
             "positions": q.get("total_holdings"), "value_m": q.get("total_value_millions"),
             "buys": buys, "sells": sells, "holds": sum(1 for a in actions if a["dir"] == "hold"),
+            "moved": round(sum(abs(a["v"] or 0) for a in moved)),
             "n_tickers": len({a["t"] or a["n"] for a in moved}),
             "top": [a["t"] or a["n"] for a in actions[:3]],
             "opened": [a["t"] or a["n"] for a in actions if a["ch"] == "new"][:8],
@@ -190,6 +198,7 @@ def insider_people(rows: Iterable[dict[str, Any]], since: str) -> list[dict[str,
     for p in out:
         p["n_tickers"] = 1
         p["value"] = round(p["value"])
+        p["moved"] = p["value"]
     return out
 
 
@@ -224,6 +233,7 @@ def house_people(rows: Iterable[dict[str, Any]], since: str, names_zh: Optional[
     for p in people.values():
         p["n_tickers"] = len(p.pop("tickers"))
         p["mid"] = round(p["mid"])
+        p["moved"] = p["mid"]
         out.append(p)
     out.sort(key=lambda p: (p["filed"] or "", p["trades"]), reverse=True)
     return out
@@ -246,7 +256,19 @@ def tickers_view(funds: list[dict[str, Any]], insider_rows: Iterable[dict[str, A
         # the gap between sources is measured from; ``seen`` is the latest of
         # anything listed, a plan sale or a held position included.
         return row["src"].setdefault(src, {"buy": 0, "sell": 0, "hold": 0, "who": [], "date": None,
-                                           "seen": None, "filed": None, "value": 0.0})
+                                           "seen": None, "filed": None, "value": 0.0,
+                                           "bought": 0.0, "sold": 0.0})
+
+    def tally(s: dict[str, Any], w: Optional[dict[str, Any]], signed: Optional[float]) -> None:
+        # Dollars into a stock (plus) or out of it (minus), added to the
+        # source's totals -- every trade, past the cut on ``who`` too -- and to
+        # the person's own entry. A plan sale is money moved like any other;
+        # it is the side it does not set.
+        if signed is None:
+            return
+        s["bought" if signed >= 0 else "sold"] += abs(signed)
+        if w is not None:
+            w["v"] = (w.get("v") or 0) + signed
 
     for p in funds:
         for a in p.get("actions") or ():
@@ -254,27 +276,32 @@ def tickers_view(funds: list[dict[str, Any]], insider_rows: Iterable[dict[str, A
                 continue
             s = slot(a["t"], "funds")
             s[a["dir"]] += 1
-            if a["dir"] != "hold" and len(s["who"]) < MAX_WHO:
-                s["who"].append({"id": p.get("id") or _fund_id(p["org"]), "name": p["name"],
-                                 "name_zh": p.get("name_zh"), "org": p["org"], "ch": a["ch"], "w": a.get("w")})
+            if a["dir"] != "hold":
+                w = None
+                if len(s["who"]) < MAX_WHO:
+                    w = {"id": p.get("id") or _fund_id(p["org"]), "name": p["name"], "name_zh": p.get("name_zh"),
+                         "org": p["org"], "ch": a["ch"], "w": a.get("w"), "pct": a.get("pct"), "v": None}
+                    s["who"].append(w)
+                tally(s, w, a.get("v"))
             if a["dir"] != "hold":
                 s["date"] = max(s["date"] or "", p.get("as_of") or "") or None
             s["seen"] = max(s["seen"] or "", p.get("as_of") or "") or None
             s["filed"] = max(s["filed"] or "", p.get("filed") or "") or None
             book[a["t"]]["n"] = book[a["t"]]["n"] or a.get("n")
 
-    def listed(s: dict[str, Any], name: Optional[str], direction: str, make) -> None:
-        # One entry per person per stock. Rows arrive newest first, so an
-        # entry carries the latest trade's direction until an older trade the
-        # other way makes it "mixed".
+    def listed(s: dict[str, Any], name: Optional[str], direction: str, make) -> Optional[dict[str, Any]]:
+        # One entry per person per stock, or None past MAX_WHO. Rows arrive
+        # newest first, so an entry carries the latest trade's direction until
+        # an older trade the other way makes it "mixed".
         by = s.setdefault("_by", {})
         w = by.get(name)
         if w is None:
             if len(s["who"]) < MAX_WHO:
-                by[name] = make()
-                s["who"].append(by[name])
+                by[name] = w = make()
+                s["who"].append(w)
         elif w["dir"] != direction:
             w["dir"] = "mixed"
+        return w
 
     for r in insider_rows:
         if r.get("k") not in ("buy", "sell") or not r.get("t") or (r.get("f") or "") < since:
@@ -289,9 +316,11 @@ def tickers_view(funds: list[dict[str, Any]], insider_rows: Iterable[dict[str, A
                 s["value"] += float(r["v"]) * (1 if r["k"] == "buy" else -1)
         s.setdefault("plan", 0)
         s["plan"] += 0 if counts else 1
-        listed(s, r.get("o"), r["k"], lambda r=r: {"id": _insider_id(r.get("o"), r["t"]), "name": r.get("o"),
-                                           "title": r.get("ti"), "dir": r["k"], "plan": bool(r.get("pl")),
-                                           "offering": bool(r["k"] == "buy" and r.get("of"))})
+        w = listed(s, r.get("o"), r["k"], lambda r=r: {"id": _insider_id(r.get("o"), r["t"]), "name": r.get("o"),
+                                               "title": r.get("ti"), "dir": r["k"], "plan": bool(r.get("pl")),
+                                               "offering": bool(r["k"] == "buy" and r.get("of")), "v": None})
+        if isinstance(r.get("v"), (int, float)):
+            tally(s, w, float(r["v"]) * (1 if r["k"] == "buy" else -1))
         if counts:
             s["date"] = max(s["date"] or "", r.get("d") or "") or None
         s["seen"] = max(s["seen"] or "", r.get("d") or "") or None
@@ -304,9 +333,15 @@ def tickers_view(funds: list[dict[str, Any]], insider_rows: Iterable[dict[str, A
         s[r["dir"]] += 1
         if r.get("lo") and r.get("hi"):
             s["value"] += (r["lo"] + r["hi"]) / 2 * (1 if r["dir"] == "buy" else -1)
-        listed(s, r.get("m"), r["dir"], lambda r=r: {"id": _house_id(r.get("m")), "name": r.get("m"),
-                                           "name_zh": (names_zh or {}).get(r.get("m")),
-                                           "org": r.get("md"), "dir": r["dir"]})
+        w = listed(s, r.get("m"), r["dir"], lambda r=r: {"id": _house_id(r.get("m")), "name": r.get("m"),
+                                               "name_zh": (names_zh or {}).get(r.get("m")),
+                                               "org": r.get("md"), "dir": r["dir"], "v": None, "lo": 0, "hi": 0})
+        if r.get("lo") and r.get("hi"):
+            # A range, so its midpoint, and the range itself for the page.
+            tally(s, w, (r["lo"] + r["hi"]) / 2 * (1 if r["dir"] == "buy" else -1))
+            if w is not None:
+                w["lo"] += r["lo"]
+                w["hi"] += r["hi"]
         s["date"] = max(s["date"] or "", r.get("d") or "") or None
         s["seen"] = max(s["seen"] or "", r.get("d") or "") or None
         s["filed"] = max(s["filed"] or "", r.get("f") or "") or None
@@ -318,6 +353,10 @@ def tickers_view(funds: list[dict[str, Any]], insider_rows: Iterable[dict[str, A
             s.pop("_by", None)
             s["side"] = _side(s["buy"], s["sell"])
             s["value"] = round(s["value"])
+            s["bought"], s["sold"] = round(s["bought"]), round(s["sold"])
+            for w in s["who"]:
+                if w.get("v") is not None:
+                    w["v"] = round(w["v"])
             if s["side"] in ("buy", "sell"):
                 sides[src] = s["side"]
         buying = [k for k, v in sides.items() if v == "buy"]

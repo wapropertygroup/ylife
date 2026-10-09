@@ -125,6 +125,31 @@ def _url_for(cik, accession, name="infotable.xml"):
 # Value units
 # ---------------------------------------------------------------------------
 
+class MoneyMovedTests(unittest.TestCase):
+    """What the shares one holding bought or sold this quarter were worth at
+    quarter end -- the figure /13f's money-moved columns and /smart-money's
+    amounts both read, so the two cannot disagree."""
+
+    def test_a_new_position_is_all_of_it(self):
+        self.assertEqual(s.money_moved_m({"change": "new", "value_millions": 50.0}), 50.0)
+
+    def test_an_add_and_a_trim_are_the_shares_changed(self):
+        h = {"change": "increased", "value_millions": 120.0, "shares": 1200, "change_shares": 200}
+        self.assertAlmostEqual(s.money_moved_m(h), 20.0)
+        h = {"change": "reduced", "value_millions": 90.0, "shares": 900, "change_shares": -100}
+        self.assertAlmostEqual(s.money_moved_m(h), -10.0)
+
+    def test_a_percentage_stands_in_for_a_missing_share_count(self):
+        # +25% to 1,000 shares means 200 were added to 800.
+        h = {"change": "increased", "value_millions": 100.0, "shares": 1000, "change_pct": 25.0}
+        self.assertAlmostEqual(s.money_moved_m(h), 20.0)
+
+    def test_unchanged_is_zero_and_unknown_is_none(self):
+        self.assertEqual(s.money_moved_m({"change": "unchanged", "value_millions": 5.0}), 0.0)
+        self.assertIsNone(s.money_moved_m({"change": "unknown", "value_millions": 5.0}))
+        self.assertIsNone(s.money_moved_m({"change": "increased", "value_millions": 5.0}))   # nothing to scale by
+
+
 class ValueUnitTests(unittest.TestCase):
     def test_berkshire_2026_aapl_is_dollars(self):
         rows = [_row(65_950_296_923, 227_917_808)]

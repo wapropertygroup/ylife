@@ -1617,6 +1617,30 @@ def _annotate_changes(curr: List[dict], prev: List[dict]) -> List[dict]:
     return curr
 
 
+def money_moved_m(h: dict) -> Optional[float]:
+    """What the shares one holding bought or sold this quarter were worth at
+    quarter end, in $ millions: the whole position if it is new, minus for a
+    trim, 0 if unchanged, None where the change is unknown (an implausible
+    swing, or no share count to scale by). /13f's money-moved columns and
+    /smart-money's amounts both read it, so the two cannot disagree."""
+    v = h.get("value_millions") or 0
+    change = h.get("change")
+    if change == "new":
+        return float(v)
+    if change == "unchanged":
+        return 0.0
+    if change in ("increased", "reduced"):
+        shares = h.get("shares") or 0
+        delta = h.get("change_shares")
+        pct = h.get("change_pct")
+        if delta is None and pct is not None and shares and pct > -100:
+            delta = shares - shares / (1 + pct / 100)
+        if delta is None or not shares:
+            return None
+        return float(v) * delta / shares
+    return None
+
+
 def _merge_by_ticker(holdings: List[dict]) -> List[dict]:
     """Merge holdings that share the same resolved ticker symbol.
 

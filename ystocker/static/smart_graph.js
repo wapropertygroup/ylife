@@ -69,6 +69,22 @@
 
   const peopleOn = (row, src) => src.reduce((n, s) => n + ((row.src[s] && row.src[s].who) || []).length, 0);
 
+  /**
+   * Dollars a row's sources switched on moved: ``b`` into the stock, ``s``
+   * out of it. Every trade counts, past the cut on ``who`` too; a 13F's is
+   * the shares added or trimmed at the quarter-end price, a House trade's the
+   * midpoint of its range (ystocker/smart_money.py).
+   */
+  function amountOn(row, src) {
+    const out = { b: 0, s: 0 };
+    src.forEach(k => {
+      const x = row.src[k];
+      if (x) { out.b += x.bought || 0; out.s += x.sold || 0; }
+    });
+    return out;
+  }
+  const grossOn = (row, src) => { const a = amountOn(row, src); return a.b + a.s; };
+
   // A row's agreement, but only if every source in it is switched on: the
   // table's "Same way" filter applies the same rule.
   function agreeOn(row, src) {
@@ -128,10 +144,13 @@
     const o = opts || {};
     const src = enabled(o.src);
     const max = o.max || 44;
+    // By amount, the stocks the most money moved through; otherwise the ones
+    // with the most people on them, which are the hubs.
+    const byAmount = o.rank === 'amount';
     const all = (data && data.tickers) || [];
-    const ranked = (rows || []).map((r, i) => ({ r, i, n: peopleOn(r, src) }))
+    const ranked = (rows || []).map((r, i) => ({ r, i, n: peopleOn(r, src), v: grossOn(r, src) }))
       .filter(x => x.n > 0)
-      .sort((a, b) => b.n - a.n
+      .sort((a, b) => (byAmount ? b.v - a.v : 0) || b.n - a.n
         || ((agreeOn(b.r, src) ? b.r.agree.sources.length : 0) - (agreeOn(a.r, src) ? a.r.agree.sources.length : 0))
         || a.i - b.i);
     const chosen = ranked.slice(0, max).map(x => x.r);
@@ -144,15 +163,17 @@
       SRC.forEach(s => { arcs[s] = src.indexOf(s) >= 0 ? arcOf(r.src[s]) : null; });
       const agree = agreeOn(r, src);
       index.set('t:' + r.t, nodes.length);
+      const amt = amountOn(r, src);
       nodes.push({ id: 't:' + r.t, type: 'stock', key: r.t, row: r, arcs,
-                   agree: agree ? agree.side : null, split: !!r.split, moves: peopleOn(r, src), deg: 0 });
+                   agree: agree ? agree.side : null, split: !!r.split, moves: peopleOn(r, src), deg: 0,
+                   bought: amt.b, sold: amt.s, amount: amt.b + amt.s });
     });
     const person = (pid, make) => {
       let pi = index.get('p:' + pid);
       if (pi == null) {
         pi = nodes.length;
         index.set('p:' + pid, pi);
-        nodes.push(Object.assign({ id: 'p:' + pid, type: 'person', key: pid, moves: 0, deg: 0 }, make()));
+        nodes.push(Object.assign({ id: 'p:' + pid, type: 'person', key: pid, moves: 0, deg: 0, amount: 0 }, make()));
       }
       return pi;
     };
@@ -172,16 +193,23 @@
                                                      sub: '', ticker: r.t, who, count: who.length }));
           const dirs = new Set(who.map(w => w.dir));
           const dir = side || (dirs.size === 1 ? who[0].dir : 'mixed');
-          links.push({ a: si, b: pi, src: s, dir, soft: !side, ch: null });
+          const b = x.bought || 0, sold = x.sold || 0;
+          links.push({ a: si, b: pi, src: s, dir, soft: !side, ch: null,
+                       v: b || sold ? b - sold : null, gross: b + sold, bought: b, sold });
           nodes[pi].moves = who.length;
+          nodes[pi].amount = b + sold;
           return;
         }
         who.forEach(w => {
           const pi = person(personId(s, w, r.t), () => ({ kind: KIND[s], name: w.name || '?', name_zh: w.name_zh || null,
                                                           sub: w.org || '', ticker: null }));
           const dir = s === 'funds' ? (CH_DIR[w.ch] || 'hold') : (w.dir || 'none');
-          links.push({ a: si, b: pi, src: s, dir, soft: !!(w.plan || w.offering) || dir === 'hold', ch: w.ch || null });
+          const v = typeof w.v === 'number' ? w.v : null;
+          links.push({ a: si, b: pi, src: s, dir, soft: !!(w.plan || w.offering) || dir === 'hold', ch: w.ch || null,
+                       v, gross: v == null ? 0 : Math.abs(v), pct: w.pct != null ? w.pct : null,
+                       lo: w.lo || null, hi: w.hi || null });
           nodes[pi].moves++;
+          nodes[pi].amount += v == null ? 0 : Math.abs(v);
         });
       });
     });
@@ -199,22 +227,29 @@
           const si = index.get('t:' + a.t);
           if (si == null || joined.has(si + ':' + pi)) return;
           joined.add(si + ':' + pi);
-          links.push({ a: si, b: pi, src: 'funds', dir: 'hold', soft: true, ch: 'unchanged' });
+          links.push({ a: si, b: pi, src: 'funds', dir: 'hold', soft: true, ch: 'unchanged', v: null, gross: 0 });
         });
       });
     }
     links.forEach(l => { nodes[l.a].deg++; nodes[l.b].deg++; });
+    // A disc's size is what the graph is ranked by: people, or dollars (on a
+    // square-root scale, so area follows the amount).
+    const top = Math.max(1, ...nodes.filter(n => n.type === 'stock').map(n => n.amount || 0));
     nodes.forEach(n => {
-      n.r = n.type === 'stock'
-        ? clamp(6 + 3 * Math.sqrt(n.moves), 10, 26)
-        : clamp(2.6 + 1.2 * Math.sqrt(n.moves), 3.2, 7) + (n.kind === 'fund' ? 0.9 : 0);
+      n.r = n.type !== 'stock' ? clamp(2.6 + 1.2 * Math.sqrt(n.moves), 3.2, 7) + (n.kind === 'fund' ? 0.9 : 0)
+        : byAmount ? 10 + 16 * Math.sqrt((n.amount || 0) / top)
+        : clamp(6 + 3 * Math.sqrt(n.moves), 10, 26);
     });
+    // A link's width is its dollars against the largest drawn.
+    const most = Math.max(1, ...links.map(l => l.gross || 0));
+    links.forEach(l => { l.weight = l.gross ? Math.sqrt(l.gross / most) : 0; });
     return {
       nodes, links,
       stocks: chosen.length,
       people: nodes.length - chosen.length,
       // How many rows had anyone on them, so the page can say the graph is a cut.
       total: ranked.length,
+      rank: byAmount ? 'amount' : 'people',
     };
   }
 
@@ -451,6 +486,8 @@
    *   tooltip(node, g)     -- the tooltip's HTML (already escaped)
    *   label(node)          -- a person's label text
    *   sub(node)            -- the line under a stock's ticker, or ''
+   *   amount(link)         -- a link's dollars as text ('' for none), shown
+   *                           beside what is lit
    * Returns {set(g, {focus}), focus(id), zoom(f), fit(), redraw(), destroy()}.
    */
   function mount(host, opts) {
@@ -468,7 +505,7 @@
     const now = () => (win.performance ? win.performance.now() : Date.now());
 
     let W = 0, H = 0, dpr = 1;
-    let g = null, nbr = [];
+    let g = null, nbr = [], pairs = new Map();
     let cam = { x: 0, y: 0, k: 1 }, camAnim = null, userCam = false;
     let focusId = null, hoverId = null;
     let labels = [], labelsKey = '';
@@ -516,8 +553,11 @@
 
     function index() {
       nbr = g.nodes.map(() => new Set());
+      pairs = new Map();
       g.links.forEach(l => {
         nbr[l.a].add(l.b); nbr[l.b].add(l.a);
+        // A hold beside a move is never drawn, so one link per pair.
+        if (!pairs.has(l.a + ':' + l.b) || l.dir !== 'hold') pairs.set(l.a + ':' + l.b, l);
         const h = hash(g.nodes[l.a].id + '>' + g.nodes[l.b].id);
         l.bend = ((h & 1) ? 1 : -1) * (0.07 + (h % 7) / 100);
         l.phase = (h % 1000) / 1000;
@@ -647,7 +687,9 @@
         const c = curve(l);
         ctx.globalAlpha = (on ? (ai >= 0 ? 0.92 : P.linkA) : P.linkDim) * Math.min(fadeOf(g.nodes[l.a]), fadeOf(g.nodes[l.b]));
         ctx.strokeStyle = P[l.dir] || P.none;
-        ctx.lineWidth = on && ai >= 0 ? 1.7 : 1;
+        // Wider for more dollars (l.weight, square-root of its share of the
+        // largest drawn), so the big adds and trims stand out.
+        ctx.lineWidth = (on && ai >= 0 ? 1.5 : 0.9) + l.weight * (on && ai >= 0 ? 3.2 : 2.4);
         ctx.setLineDash(l.soft ? [3, 4] : []);
         ctx.beginPath(); ctx.moveTo(c.x0, c.y0); ctx.quadraticCurveTo(c.cx, c.cy, c.x1, c.y1); ctx.stroke();
       });
@@ -739,10 +781,24 @@
             : n.kind === 'fund' ? 200 + n.moves
             : n.kind === 'house' && n.moves >= 2 ? 100 + n.moves : -1;
           if (pri < 0) return;
-          const text = o.label ? o.label(n) : n.name;
+          let text = o.label ? o.label(n) : n.name;
           if (!text) return;
+          // A lit stock's people say how much each moved.
+          const l = near && i !== ai && g.nodes[ai].type === 'stock' ? pairs.get(ai + ':' + i) : null;
+          const amt = l && o.amount ? o.amount(l) : '';
+          if (amt) text += '  ' + amt;
           cands.push({ id: n.id, text, pri, near, x: sx(n.x), y: sy(n.y), r: rOf(n), w: measure(text, font), h: 13 });
         });
+        // A lit person's stocks say how much went into or out of each.
+        if (ai >= 0 && g.nodes[ai].type === 'person' && o.amount) {
+          lit.forEach(j => {
+            const l = pairs.get(j + ':' + ai), n = g.nodes[j];
+            const text = l && n.type === 'stock' ? o.amount(l) : '';
+            if (!text) return;
+            cands.push({ id: n.id, text, pri: 4000 + (l.gross || 0) / 1e12, near: true, color: P[l.dir] || null,
+                         x: sx(n.x), y: sy(n.y), r: rOf(n) + 2, w: measure(text, font), h: 13 });
+          });
+        }
         cands.sort((a, b) => b.pri - a.pri);
         // With something lit, a dimmed disc does not keep a lit name off the
         // canvas: the label's halo reads over it.
@@ -758,7 +814,7 @@
         ctx.textAlign = lb.align;
         ctx.lineWidth = 3; ctx.strokeStyle = P.halo;
         ctx.strokeText(lb.text, lb.lx, lb.ly);
-        ctx.fillStyle = lb.near ? P.labelStrong : P.label;
+        ctx.fillStyle = lb.color || (lb.near ? P.labelStrong : P.label);
         ctx.fillText(lb.text, lb.lx, lb.ly);
       });
       ctx.globalAlpha = 1;
@@ -911,7 +967,7 @@
     return api;
   }
 
-  const api = { build, focusRows, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS };
+  const api = { build, focusRows, amountOn, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SmartGraph = api;
 })(typeof window !== 'undefined' ? window : globalThis);

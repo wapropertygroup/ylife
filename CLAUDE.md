@@ -3186,10 +3186,10 @@ company outside the sweep says so rather than "none"); and House trades with
 owner, range, lag and a link to the PTR.
 
 /api/smart-money is recomputed when one of the three caches moves, else at most
-every 10 minutes (~520 KB, ~71 KB gzipped on real data). The page has its own
+every 10 minutes (~573 KB, ~86 KB gzipped on real data). The page has its own
 tab (Smart money, after 13F) since 2026-10-08, and is linked from /13f,
 /insiders, the phone menu and both footers.
-Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (24) and
+Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (25) and
 `tests/check_sectors_money_endpoints.py` (16, hermetic).
 
 **The network (星系图), after openbit.trade/people's** (asked 2026-10-09: "这个graph很好看啊").
@@ -3224,8 +3224,22 @@ tap's answer is under the picture.
   scrolls the page). Nothing is lit until something is asked for, though the
   panel still shows the first row. The controller hangs on the stage as
   `#moGraph.smartGraph` (`screenOf(id)` for browser checks).
-- **Tests.** `node tests/check_smart_graph.mjs` (65: the joins, the cut, picks,
-  holds, old payloads, determinism, overlaps, labels, the page's wiring).
+- **Amounts, and a sort by them** (asked the same day: "show the amounts of
+  trimmed and added in graph. user should be able to sort by amount"). Every
+  `who` entry carries its dollars (`v`, signed: in on a buy, out on a sale;
+  a House member's summed `lo`/`hi` range too), every source its `bought` and
+  `sold` over all its trades, past the cut on `who`, and every person a
+  `moved`. A 13F's is the shares added or trimmed at the quarter-end price,
+  `sec13f.money_moved_m`, which /13f's money-moved columns now call as well,
+  so the two cannot disagree. A plan sale counts as money moved, though it
+  sets no side. On the page a link's width is its dollars, and lighting a
+  stock labels each person with theirs ("沃伦·巴菲特 ↑$11.8B"), lighting a
+  person each stock. The table has an Amount column. A sort chip (默认 · 按金额
+  · 按人数, `?sort=`) orders the table, the people, the panel's lists and the
+  graph's cut, and by amount the discs are sized by dollars too.
+- **Tests.** `node tests/check_smart_graph.mjs` (76: the joins, the cut, picks,
+  holds, amounts and the amount ranking, old payloads, determinism, overlaps,
+  labels, the page's wiring); `MoneyMovedTests` in `tests/test_sec13f.py`.
 
 ### Prediction markets (`/predictions`)
 

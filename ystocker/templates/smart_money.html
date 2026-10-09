@@ -42,7 +42,7 @@
 
   /* By stock */
   .mo-thead, .mo-trow { display: grid; align-items: center; gap: 2px 10px; padding: 8px 12px;
-                        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) 5.5rem 5.5rem 5.5rem 5rem; }
+                        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.1fr) 4.75rem 4.75rem 4.75rem 7rem 4.5rem; }
   .mo-thead { font-size: 10.5px; font-weight: 600; color: var(--t-ink-dim); text-transform: uppercase; letter-spacing: .03em;
               border-bottom: 1px solid var(--t-line); position: sticky; top: 0; background: var(--t-surface); z-index: 1; }
   .mo-trow { border-top: 1px solid var(--t-line); cursor: pointer; }
@@ -65,11 +65,19 @@
   .mo-src { font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .mo-src .up { color: var(--mo-up); } .mo-src .down { color: var(--mo-down); } .mo-src .dim { color: var(--t-ink-dim); }
   .mo-date { font-size: 11.5px; color: var(--t-ink-muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mo-amt { font-size: 11.5px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t-ink-dim); }
+  .mo-amt .up { color: var(--mo-up); } .mo-amt .down { color: var(--mo-down); }
+  .mo-amt-v { font-size: 11px; color: var(--t-ink-muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .mo-tot { font-size: 11px; color: var(--t-ink-dim); margin: -2px 0 4px; font-variant-numeric: tabular-nums; }
+  .mo-tot .up { color: var(--mo-up); } .mo-tot .down { color: var(--mo-down); }
   @media (max-width: 720px) {
     .mo-thead { display: none; }
     .mo-trow { grid-template-columns: minmax(0, 1fr) auto; }
     .mo-trow .mo-agree { grid-column: 1 / -1; }
     .mo-trow .mo-src { display: none; }
+    /* The amounts are what a sort by amount is read for. */
+    .mo-trow .mo-amt { display: none; }
+    .mo-rows.is-by-amount .mo-trow .mo-amt { display: block; grid-column: 1 / -1; text-align: left; }
   }
 
   /* By person */
@@ -179,6 +187,11 @@
     <button type="button" class="mo-chip" data-mo-side="buy" data-i18n="smart.side_buy">Buying</button>
     <button type="button" class="mo-chip" data-mo-side="sell" data-i18n="smart.side_sell">Selling</button>
   </div>
+  <div class="mo-group" role="group" aria-label="Sort" id="moSorts">
+    <button type="button" class="mo-chip" data-mo-sort="default" data-i18n="smart.sort_default">Default order</button>
+    <button type="button" class="mo-chip" data-mo-sort="amount" data-i18n="smart.sort_amount">By amount</button>
+    <button type="button" class="mo-chip" data-mo-sort="people" data-i18n="smart.sort_people">By people</button>
+  </div>
   <input id="moSearch" class="mo-search" type="search" autocomplete="off" spellcheck="false"
          placeholder="Filter by stock or name" data-i18n-placeholder="smart.search_ph">
 </div>
@@ -207,7 +220,7 @@
         <path d="M8.51 2.22 A5.8 5.8 0 0 1 13.26 10.45" stroke="var(--mo-up)"/>
         <path d="M12.75 11.33 A5.8 5.8 0 0 1 3.25 11.33" stroke="var(--mo-down)"/>
         <path d="M2.74 10.45 A5.8 5.8 0 0 1 7.49 2.22" stroke="var(--mo-g-hold)"/></g></svg><span data-i18n="smart.g_ring">ring, clockwise from 12: 13F · insiders · House</span></span>
-      <span class="mo-g-hint" data-i18n="smart.g_hint">Dots run the way the money went: into a stock on a buy, out of it on a sale. Click a stock or a person; drag one to move it; hold ⌘ or Ctrl and scroll to zoom.</span>
+      <span class="mo-g-hint" data-i18n="smart.g_hint">A thicker line moved more money, and its dots run the way it went: into a stock on a buy, out of it on a sale. Click a stock or a person to see the amounts; drag one to move it; hold ⌘ or Ctrl and scroll to zoom.</span>
     </div>
   </section>
   <aside id="moDetail" class="mo-card mo-detail" aria-live="polite"></aside>
@@ -249,6 +262,7 @@
   const state = {
     view: pick(params.get('view'), ['stocks', 'people'], 'stocks'),
     side: pick(params.get('side'), ['all', 'agree', 'buy', 'sell'], 'all'),
+    sort: pick(params.get('sort'), ['default', 'amount', 'people'], 'default'),
     src: new Set((params.get('src') || SRC.join(',')).split(',').filter(s => SRC.indexOf(s) >= 0)),
     sel: params.get('sel') || '',
     // The panel always shows something, the first row if nothing was picked;
@@ -283,7 +297,24 @@
   const historyUrl = t => '/history/' + encodeURIComponent(t) + '?tab=money';
 
   // ── by stock ────────────────────────────────────────────────────────────
+  // Dollars the sources switched on moved through a row: ``b`` in, ``s`` out
+  // (smart_money.py's bought/sold: a 13F's adds and trims at the quarter-end
+  // price, an insider's filed value, a House range's midpoint).
+  function amountOf(r) {
+    let b = 0, s = 0;
+    SRC.forEach(k => { const x = state.src.has(k) && r.src[k]; if (x) { b += x.bought || 0; s += x.sold || 0; } });
+    return { b, s };
+  }
+  const peopleOf = r => SRC.reduce((n, k) => n + (state.src.has(k) && r.src[k] ? r.src[k].who.length : 0), 0);
+  // Largest first, the table's own order breaking ties.
+  const sortBy = (rows, f) => rows.map((r, i) => [f(r), i, r]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(x => x[2]);
   function stockRows() {
+    const rows = filteredStocks();
+    if (state.sort === 'amount') return sortBy(rows, r => { const a = amountOf(r); return a.b + a.s; });
+    if (state.sort === 'people') return sortBy(rows, peopleOf);
+    return rows;
+  }
+  function filteredStocks() {
     const q = F('moSearch').value.trim().toLowerCase();
     const names = data.names || {};
     return (data.tickers || []).filter(r => {
@@ -320,17 +351,25 @@
     const who = x.who.map(w => w.name).filter(Boolean).slice(0, 5).join(', ');
     return `<span class="mo-src" title="${esc(who)}">${parts.join(' ') || '·'}</span>`;
   }
+  function amountCell(r) {
+    const a = amountOf(r), parts = [];
+    if (a.b) parts.push(`<span class="up">↑${esc(money(a.b))}</span>`);
+    if (a.s) parts.push(`<span class="down">↓${esc(money(a.s))}</span>`);
+    return `<span class="mo-amt">${parts.join(' ') || '—'}</span>`;
+  }
   function renderStocks() {
     const rows = stockRows();
     F('moHead').innerHTML = `<div class="mo-thead"><span>${esc(tr('smart.col_stock', 'Stock'))}</span><span>${esc(tr('smart.col_agree', 'Same way?'))}</span>`
       + SRC.map(s => `<span style="text-align:center">${esc(tr(SRC_SHORT[s], s))}</span>`).join('')
+      + `<span style="text-align:right" title="${esc(tr('smart.amount_title', ''))}">${esc(tr('smart.col_amount', 'Amount'))}</span>`
       + `<span style="text-align:right">${esc(tr('smart.col_latest', 'Latest'))}</span></div>`;
+    F('moRows').classList.toggle('is-by-amount', state.sort === 'amount');
     if (!rows.length) { F('moRows').innerHTML = `<p class="mo-empty">${esc(tr('smart.none', 'Nothing matches.'))}</p>`; F('moMore').hidden = true; return rows; }
     const names = data.names || {};
     F('moRows').innerHTML = rows.slice(0, state.shown).map(r => `<div class="mo-trow${r.t === state.sel ? ' is-sel' : ''}" data-mo-t="${esc(r.t)}">
         <span class="mo-co">${tile(r.t)}<span style="min-width:0"><span class="mo-tk">${esc(r.t)}</span><span class="mo-nm">${esc(names[r.t] || r.n || '')}</span></span></span>
         <span class="mo-agree">${agreeText(r)}</span>${SRC.map(s => srcCell(r, s)).join('')}
-        <span class="mo-date">${esc(fmtDay(r.latest))}</span></div>`).join('');
+        ${amountCell(r)}<span class="mo-date">${esc(fmtDay(r.latest))}</span></div>`).join('');
     const left = rows.length - Math.min(state.shown, rows.length);
     F('moMore').hidden = left <= 0;
     F('moMore').textContent = fill(tr('smart.more', 'Show more ({n} left)'), { n: left });
@@ -339,6 +378,10 @@
 
   // ── by person ───────────────────────────────────────────────────────────
   function peopleRows() {
+    const rows = filteredPeople();
+    return state.sort === 'amount' ? sortBy(rows, p => p.moved || 0) : rows;
+  }
+  function filteredPeople() {
     const q = F('moSearch').value.trim().toLowerCase();
     const kindSrc = { fund: 'funds', insider: 'insiders', house: 'house' };
     return (data.people || []).filter(p => {
@@ -357,6 +400,8 @@
     if (p.sells) bits.push(`<span class="down">↓${p.sells}</span>`);
     const when = p.kind === 'fund' ? fill(tr('smart.q_to', 'Q to {d}'), { d: fmtDay(p.as_of) })
       : fmtDay(p.kind === 'house' ? p.filed : p.latest);
+    // A House member's is the midpoints of ranges, so "about".
+    if (p.moved) bits.push(esc((p.kind === 'house' ? '~' : '') + money(p.moved)));
     return bits.join(' ') + (bits.length ? ' · ' : '') + esc(when);
   }
   function personOrg(p) {
@@ -385,6 +430,15 @@
 
   // ── the panel ───────────────────────────────────────────────────────────
   function lagText(n) { return n == null ? '' : fill(tr('smart.lag', '{n} days later'), { n }); }
+  // One person's dollars on one stock, with the way they went: a 13F's adds
+  // and trims at the quarter-end price, an insider's filed values, a House
+  // member's ranges (summed, so still a range).
+  function whoAmount(s, w) {
+    const arrow = w.dir === 'mixed' ? '⇅' : (w.v != null ? w.v < 0 : w.dir === 'sell' || w.ch === 'reduced') ? '↓' : '↑';
+    if (s === 'house') return w.lo && w.hi ? arrow + range(w.lo, w.hi) : '';
+    if (w.v == null || !w.v) return '';
+    return arrow + money(Math.abs(w.v));
+  }
   function stockPanel(r) {
     const names = data.names || {};
     const v = r.agree
@@ -402,13 +456,20 @@
       if (!x) return;
       const when = s === 'funds' ? fill(tr('smart.w_funds', 'quarter to {d}'), { d: fmtYDay(x.date) })
         : fill(tr('smart.w_trades', 'latest trade {d}'), { d: fmtYDay(x.date) });
-      html += `<h3 class="mo-h3"><span>${esc(tr(SRC_KEY[s], s))} ${sideBadge(x.side)}</span><span class="mo-when">${esc(when)}</span></h3><ul class="mo-items">`;
-      html += x.who.map(w => {
+      const totals = [x.bought ? `<span class="up">↑${esc(money(x.bought))}</span>` : '', x.sold ? `<span class="down">↓${esc(money(x.sold))}</span>` : ''].filter(Boolean).join(' ');
+      html += `<h3 class="mo-h3"><span>${esc(tr(SRC_KEY[s], s))} ${sideBadge(x.side)}</span><span class="mo-when">${esc(when)}</span></h3>`
+        + (totals ? `<p class="mo-tot" title="${esc(tr('smart.amount_title', ''))}">${esc(tr('smart.col_amount', 'Amount'))} ${totals}</p>` : '')
+        + '<ul class="mo-items">';
+      const who = state.sort === 'amount' ? sortBy(x.who, w => Math.abs(w.v || 0)) : x.who;
+      html += who.map(w => {
         const k = esc((zh() && w.name_zh) || w.name || '');
         let val = '';
         if (s === 'funds') val = `<span class="mo-badge ${w.ch === 'reduced' ? 'sell' : 'buy'}">${esc(tr(CH_KEY[w.ch] || '', w.ch || ''))}</span>`;
         else val = `<span class="mo-badge ${w.dir}">${esc(tr(SIDE_KEY[w.dir] || '', w.dir))}</span>`;
-        const sub = s === 'funds' ? [w.org, w.w != null ? fill(tr('smart.weight', '{w}% of the fund'), { w: w.w }) : ''].filter(Boolean).join(' · ')
+        const amt = whoAmount(s, w);
+        if (amt) val = `<span class="mo-amt-v">${esc(amt)}</span>` + val;
+        const change = s === 'funds' && w.pct != null && w.ch !== 'new' ? fill(tr('smart.shares_change', 'shares {p}'), { p: (w.pct > 0 ? '+' : '') + w.pct + '%' }) : '';
+        const sub = s === 'funds' ? [w.org, w.w != null ? fill(tr('smart.weight', '{w}% of the fund'), { w: w.w }) : '', change].filter(Boolean).join(' · ')
           : s === 'insiders' ? [w.title, w.plan ? tr('smart.plan', 'under a 10b5-1 plan') : ''].filter(Boolean).join(' · ')
           : w.org || '';
         return `<li><span class="k">${k}</span><span class="v">${val}</span>${sub ? `<span class="s">${esc(sub)}</span>` : ''}</li>`;
@@ -426,13 +487,15 @@
       html += `<p class="mo-d-verdict">${esc(fill(tr('smart.fund_line', '13F for the quarter to {q}, filed {f} ({lag} days after). {n} positions, ${v}; opened {o}, added {a}, trimmed {r} among its 50 largest.'),
         { q: fmtYDay(p.as_of), f: fmtYDay(p.filed), lag: p.lag == null ? '—' : p.lag, n: p.positions || '—',
           v: p.value_m != null ? money(p.value_m * 1e6).replace('$', '') : '—', o: p.opened.length, a: p.buys - p.opened.length, r: p.sells }))}</p>`;
-      html += `<ul class="mo-items">` + p.actions.map(a => `<li><span class="k">${a.t ? `<a href="${historyUrl(a.t)}">${esc(a.t)}</a>` : esc(a.n || '')}</span>
-        <span class="v"><span class="mo-badge ${a.dir === 'sell' ? 'sell' : a.dir === 'buy' ? 'buy' : 'hold'}">${esc(tr(CH_KEY[a.ch] || '', a.ch || ''))}</span></span>
+      const acts = state.sort === 'amount' ? sortBy(p.actions, a => Math.abs(a.v || 0)) : p.actions;
+      html += `<ul class="mo-items">` + acts.map(a => `<li><span class="k">${a.t ? `<a href="${historyUrl(a.t)}">${esc(a.t)}</a>` : esc(a.n || '')}</span>
+        <span class="v">${a.v ? `<span class="mo-amt-v">${esc(whoAmount('funds', a))}</span>` : ''}<span class="mo-badge ${a.dir === 'sell' ? 'sell' : a.dir === 'buy' ? 'buy' : 'hold'}">${esc(tr(CH_KEY[a.ch] || '', a.ch || ''))}</span></span>
         <span class="s">${esc([a.t ? a.n : '', a.w != null ? fill(tr('smart.weight', '{w}% of the fund'), { w: a.w }) : '', a.pct != null && a.ch !== 'new' ? (a.pct > 0 ? '+' : '') + a.pct + '%' : ''].filter(Boolean).join(' · '))}</span></li>`).join('') + '</ul>';
     } else if (p.kind === 'house') {
       html += `<p class="mo-d-verdict">${esc(fill(tr('smart.house_line', '{n} trades filed in the last {d} days, about {m} at the ranges’ midpoints. Latest filed {f}.'),
         { n: p.trades, d: data.window_days, m: money(p.mid), f: fmtYDay(p.filed) }))}</p>`;
-      html += `<ul class="mo-items">` + p.actions.map(a => {
+      const acts = state.sort === 'amount' ? sortBy(p.actions, a => (a.lo || 0) + (a.hi || 0)) : p.actions;
+      html += `<ul class="mo-items">` + acts.map(a => {
         const own = a.o ? tr(OWNER_KEY[a.o] || '', a.o) : tr('smart.owner_self', 'member');
         const label = a.t ? `<a href="${historyUrl(a.t)}">${esc(a.t)}</a>` : esc(a.n || '');
         const side = a.dir ? `<span class="mo-badge ${a.dir}">${esc(tr(SIDE_KEY[a.dir] || '', a.dir))}</span>`
@@ -445,7 +508,8 @@
     } else {
       html += `<p class="mo-d-verdict">${esc(fill(tr('smart.insider_line', '{b} buys and {s} sells filed in the last {d} days, {v} in all.'),
         { b: p.buys, s: p.sells, d: data.window_days, v: money(p.value) }))}</p>`;
-      html += `<ul class="mo-items">` + p.actions.map(a => `<li><span class="k"><a href="${historyUrl(a.t)}">${esc(a.t)}</a></span>
+      const acts = state.sort === 'amount' ? sortBy(p.actions, a => a.v || 0) : p.actions;
+      html += `<ul class="mo-items">` + acts.map(a => `<li><span class="k"><a href="${historyUrl(a.t)}">${esc(a.t)}</a></span>
         <span class="v"><span class="mo-badge ${a.dir}">${esc(tr(SIDE_KEY[a.dir] || '', a.dir))}</span></span>
         <span class="s">${esc([money(a.v), fmtYDay(a.d), lagText(a.lag), a.plan ? tr('smart.plan', 'under a 10b5-1 plan') : '', a.offering ? tr('smart.offering', 'in an offering') : ''].filter(Boolean).join(' · '))}</span></li>`).join('') + '</ul>';
     }
@@ -521,6 +585,15 @@
     const name = I18n.stockName(n.key, '');
     return SmartGraph.hasCJK(name) ? name : '';
   }
+  // A link's dollars as the graph labels them: ↑ into the stock, ↓ out of it,
+  // a House member's summed ranges, a company's insiders both ways.
+  function linkAmount(l) {
+    if (!l || l.dir === 'hold') return '';
+    if (l.src === 'insiders') {
+      return [l.bought ? '↑' + money(l.bought) : '', l.sold ? '↓' + money(l.sold) : ''].filter(Boolean).join(' ');
+    }
+    return whoAmount(l.src, { v: l.v, dir: l.dir, ch: l.ch, lo: l.lo, hi: l.hi });
+  }
   function graphTip(n, g) {
     const hint = key => `<div class="sg-tip-hint">${esc(tr(key, ''))}</div>`;
     if (n.type === 'stock') {
@@ -533,22 +606,29 @@
         if (!parts.length && x.plan) parts.push(esc(fill(tr('smart.plan_only', '{n} plan'), { n: x.plan })));
         return `${esc(tr(SRC_SHORT[s], s))} ${parts.join(' ') || '·'}`;
       });
+      const a = amountOf(r);
+      const amt = [a.b ? `<span class="up">↑${esc(money(a.b))}</span>` : '', a.s ? `<span class="down">↓${esc(money(a.s))}</span>` : ''].filter(Boolean).join(' ');
       return `<div><b>${esc(r.t)}</b> <span class="sg-tip-sub">${esc(names[r.t] || r.n || '')}</span></div>`
         + `<div class="sg-tip-row">${agreeText(r)}</div><div class="sg-tip-row">${bits.join(' · ')}</div>`
+        + (amt ? `<div class="sg-tip-row">${esc(tr('smart.col_amount', 'Amount'))} ${amt}</div>` : '')
         + hint('smart.g_click_stock');
     }
     if (n.group) {
-      const rows = n.who.slice(0, 6).map(w => `<div class="sg-tip-row">${esc(w.name || '')}`
+      const who = state.sort === 'amount' ? sortBy(n.who, w => Math.abs(w.v || 0)) : n.who;
+      const rows = who.slice(0, 6).map(w => `<div class="sg-tip-row">${esc(w.name || '')}`
         + (w.title ? ` <span class="sg-tip-sub">${esc(w.title)}</span>` : '')
-        + ` <span class="${dirClass(w.dir)}">${esc(tr(SIDE_KEY[w.dir] || '', w.dir || ''))}</span>`
+        + ` <span class="${dirClass(w.dir)}">${esc(tr(SIDE_KEY[w.dir] || '', w.dir || ''))}${w.v ? ' ' + esc(money(Math.abs(w.v))) : ''}</span>`
         + (w.plan ? ` <span class="sg-tip-sub">${esc(tr('smart.plan', 'under a 10b5-1 plan'))}</span>` : '') + '</div>').join('');
       const more = n.count > 6 ? `<div class="sg-tip-sub">${esc(fill(tr('smart.g_more', '+{n} more'), { n: n.count - 6 }))}</div>` : '';
       return `<div><b>${esc(fill(tr('smart.g_insiders_of', '{t} insiders'), { t: n.ticker }))}</b></div>${rows}${more}` + hint('smart.g_click_stock');
     }
     const p = (data.people || []).find(x => x.id === n.key);
-    const moves = g.links.filter(l => g.nodes[l.b] === n).map(l => {
+    let mine = g.links.filter(l => g.nodes[l.b] === n);
+    if (state.sort === 'amount') mine = sortBy(mine, l => l.gross || 0);
+    const moves = mine.map(l => {
       const word = l.ch ? tr(CH_KEY[l.ch] || '', l.ch) : tr(DIR_KEY[l.dir] || '', l.dir);
-      return `<span class="${dirClass(l.dir)}">${esc(word)}</span> ${esc(g.nodes[l.a].key)}`;
+      const amt = linkAmount(l);
+      return `<span class="${dirClass(l.dir)}">${esc(word)}</span> ${esc(g.nodes[l.a].key)}${amt ? ` <span class="sg-tip-sub">${esc(amt)}</span>` : ''}`;
     });
     const kind = tr({ fund: 'smart.k_fund', house: 'smart.k_house', insider: 'smart.k_insider' }[n.kind], n.kind);
     return `<div><b>${esc((zh() && n.name_zh) || n.name)}</b></div>`
@@ -560,7 +640,8 @@
     const people = g.nodes.reduce((n, x) => n + (x.type !== 'person' ? 0 : x.group ? x.count : 1), 0);
     const vals = { s: g.stocks, p: people, l: g.links.length, n: g.total };
     let line = fill(tr('smart.g_stat', '{s} stocks · {p} people · {l} links'), vals);
-    if (g.total > g.stocks) line += ' · ' + fill(tr('smart.g_cut', 'the busiest of {n}'), vals);
+    if (g.total > g.stocks) line += ' · ' + fill(g.rank === 'amount' ? tr('smart.g_cut_amount', 'the largest amounts of {n}')
+                                                                    : tr('smart.g_cut', 'the busiest of {n}'), vals);
     F('moGraphStat').textContent = g.nodes.length ? line : '';
     F('moGraph').setAttribute('aria-label', fill(tr('smart.g_aria', 'Network of {s} stocks and the {p} people who moved them'), vals));
     F('moGraphEmpty').textContent = tr('smart.g_empty', 'Nothing to draw for these filters.');
@@ -572,10 +653,10 @@
     clearTimeout(graphTimer);
     if (soon) { graphTimer = setTimeout(() => syncGraph(false), 260); return; }
     const stage = F('moGraph');
-    if (!G) G = SmartGraph.mount(stage, { onPick: pickNode, tooltip: graphTip, label: graphLabel, sub: graphSub });
+    if (!G) G = SmartGraph.mount(stage, { onPick: pickNode, tooltip: graphTip, label: graphLabel, sub: graphSub, amount: linkAmount });
     const f = picked(), fid = focusNode(f);
     const max = SmartGraph.maxStocks(stage.clientWidth || 800);
-    const key = JSON.stringify([SRC.filter(s => state.src.has(s)), state.side, F('moSearch').value.trim().toLowerCase(),
+    const key = JSON.stringify([SRC.filter(s => state.src.has(s)), state.side, state.sort, F('moSearch').value.trim().toLowerCase(),
                                 max, data.as_of, data.status, (data.tickers || []).length]);
     const g = G.graph(), rows = stockRows();
     // A pick brings in what it needs -- a stock, or every stock a person
@@ -583,7 +664,7 @@
     // switched on) must not rebuild on every render.
     const missing = !!g && SmartGraph.focusRows(data, rows, f, state.src).some(r => !g.nodes.some(n => n.id === 't:' + r.t));
     if (key !== built.key || !g || (missing && built.focus !== fid)) {
-      const next = SmartGraph.build(data, rows, { src: state.src, max, focus: f });
+      const next = SmartGraph.build(data, rows, { src: state.src, max, focus: f, rank: state.sort === 'amount' ? 'amount' : 'people' });
       built = { key, focus: fid };
       G.set(next, { focus: fid });
       renderGraphStat(next);
@@ -605,6 +686,7 @@
     if (state.view !== view) {
       state.view = view; state.shown = PAGE;
       if (view === 'people' && state.side === 'agree') state.side = 'all';
+      if (view === 'people' && state.sort === 'people') state.sort = 'default';
     }
     state.sel = id;
     if (view === 'stocks') {
@@ -629,6 +711,7 @@
     const u = new URL(location.href);
     u.searchParams.set('view', state.view);
     state.side !== 'all' ? u.searchParams.set('side', state.side) : u.searchParams.delete('side');
+    state.sort !== 'default' ? u.searchParams.set('sort', state.sort) : u.searchParams.delete('sort');
     state.src.size < SRC.length ? u.searchParams.set('src', SRC.filter(s => state.src.has(s)).join(',')) : u.searchParams.delete('src');
     state.sel ? u.searchParams.set('sel', state.sel) : u.searchParams.delete('sel');
     history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString());
@@ -641,6 +724,10 @@
     document.querySelectorAll('[data-mo-side]').forEach(b => {
       b.classList.toggle('is-on', b.dataset.moSide === state.side);
       b.hidden = state.view === 'people' && b.dataset.moSide === 'agree';
+    });
+    document.querySelectorAll('[data-mo-sort]').forEach(b => {
+      b.classList.toggle('is-on', b.dataset.moSort === state.sort);
+      b.hidden = state.view === 'people' && b.dataset.moSort === 'people';
     });
     if (!data) {
       F('moSummary').textContent = failed ? tr('smart.failed', 'Smart money is unavailable right now.')
@@ -670,7 +757,15 @@
   }
   document.addEventListener('click', e => {
     const v = e.target.closest('[data-mo-view]');
-    if (v) { if (state.view !== v.dataset.moView) { state.view = v.dataset.moView; state.sel = ''; state.picked = false; state.shown = PAGE; if (state.view === 'people' && state.side === 'agree') state.side = 'all'; render(); } return; }
+    if (v) {
+      if (state.view !== v.dataset.moView) {
+        state.view = v.dataset.moView; state.sel = ''; state.picked = false; state.shown = PAGE;
+        if (state.view === 'people' && state.side === 'agree') state.side = 'all';
+        if (state.view === 'people' && state.sort === 'people') state.sort = 'default';
+        render();
+      }
+      return;
+    }
     const z = e.target.closest('[data-mo-zoom]');
     if (z) { if (G) { const k = z.dataset.moZoom; if (k === 'fit') G.fit(); else G.zoom(k === 'in' ? 1.3 : 1 / 1.3); } return; }
     const s = e.target.closest('[data-mo-src]');
@@ -681,6 +776,8 @@
     }
     const sd = e.target.closest('[data-mo-side]');
     if (sd) { state.side = sd.dataset.moSide; state.shown = PAGE; render(); return; }
+    const so = e.target.closest('[data-mo-sort]');
+    if (so) { state.sort = so.dataset.moSort; state.shown = PAGE; render(); F('moRows').scrollTop = 0; return; }
     const row = e.target.closest('[data-mo-t], [data-mo-p]');
     if (row && data && !e.target.closest('a')) {
       state.sel = row.dataset.moT || row.dataset.moP;

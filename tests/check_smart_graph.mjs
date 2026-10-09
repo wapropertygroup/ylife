@@ -134,6 +134,37 @@ console.log('build: the busiest stocks, and the pick');
   t('no pick, nothing added', SG.focusRows(DATA, ROWS, null).length === 0 && SG.focusRows(DATA, ROWS, {}).length === 0);
 }
 
+console.log('build: amounts');
+{
+  // Dollars on top of DATA: NVDA's managers add and trim, BAC sees one big trim.
+  const d = JSON.parse(JSON.stringify(DATA));
+  const nv = d.tickers.find(r => r.t === 'NVDA'), bac = d.tickers.find(r => r.t === 'BAC');
+  nv.src.funds.who.forEach((w, i) => { w.v = [2e8, 5e7, -1e8][i]; });
+  Object.assign(nv.src.funds, { bought: 2.5e8, sold: 1e8 });
+  Object.assign(nv.src.insiders, { bought: 0, sold: 3e6 });
+  Object.assign(nv.src.house, { bought: 30000, sold: 8000 });
+  bac.src.funds.who[0].v = -9e9;
+  Object.assign(bac.src.funds, { bought: 0, sold: 9e9 });
+  Object.assign(bac.src.insiders, { bought: 0, sold: 1e6 });
+  const amt = SG.amountOn(nv, ['funds', 'insiders', 'house']);
+  t('a row’s dollars add up over the sources switched on', amt.b === 2.5e8 + 30000 && amt.s === 1e8 + 3e6 + 8000);
+  t('a source switched off adds nothing', SG.amountOn(nv, ['house']).b === 30000);
+  const people = SG.build(d, d.tickers, { max: 1 });
+  const money = SG.build(d, d.tickers, { max: 1, rank: 'amount' });
+  t('by people the busiest stock is drawn', people.nodes.filter(n => n.type === 'stock').map(n => n.key).join() === 'NVDA' && people.rank === 'people');
+  t('by amount the one the most money moved through', money.nodes.filter(n => n.type === 'stock').map(n => n.key).join() === 'BAC' && money.rank === 'amount');
+  const g = SG.build(d, d.tickers, { rank: 'amount' });
+  const r = id => node(g, id).r;
+  t('by amount a disc grows with its dollars', r('t:BAC') > r('t:NVDA') && r('t:NVDA') >= r('t:XYZ'));
+  const big = linksOf(g, 't:BAC').find(l => l.src === 'funds');
+  t('a link carries its signed dollars', big.v === -9e9 && big.gross === 9e9);
+  t('the largest link is the widest, a hold has no width',
+    big.weight === 1 && g.links.every(l => l.weight <= 1) && g.links.filter(l => l.dir === 'hold').every(l => l.weight === 0));
+  const grp = linksOf(g, 'p:ins@NVDA')[0];
+  t('a company’s insiders carry both ways', grp.bought === 0 && grp.sold === 3e6 && grp.v === -3e6);
+  t('a person’s dollars add up over their links', node(g, 'p:fund-a').amount === 2e8 + 9e9);
+}
+
 console.log('build: a payload from before ids');
 {
   const old = JSON.parse(JSON.stringify(DATA));
@@ -255,6 +286,9 @@ console.log('the page wires it');
   t('it mounts with every hook the module calls', ['onPick', 'tooltip', 'label', 'sub'].every(k => new RegExp(`SmartGraph\\.mount\\([^)]*\\b${k}:`).test(tpl)));
   t('it builds from the table’s own rows', /SmartGraph\.build\(data, rows,/.test(tpl) && /const g = G\.graph\(\), rows = stockRows\(\)/.test(tpl));
   t('an insider pick lights their company’s insiders', tpl.includes("'p:ins@' + f.ticker"));
+  t('the sort decides what the graph ranks by', /rank: state\.sort === 'amount' \? 'amount' : 'people'/.test(tpl)
+    && /state\.side, state\.sort,/.test(tpl));
+  t('lit amounts come from the page', /amount: linkAmount/.test(tpl));
   t('the empty note can hide (its display would beat [hidden])', /\.mo-g-empty\[hidden\]\s*\{\s*display:\s*none/.test(tpl));
 }
 
