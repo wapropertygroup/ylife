@@ -2107,7 +2107,7 @@ const I18n = (() => {
     'smart.g_sell':             { en: 'sold', zh: '卖出' },
     'smart.g_mixed':            { en: 'both ways', zh: '买卖都有' },
     'smart.g_soft':             { en: 'held, or a 10b5-1 plan trade', zh: '持有不变，或 10b5-1 计划内交易' },
-    'smart.g_ring':             { en: 'ring, clockwise from 12: 13F · insiders · House, each split by dollars bought and sold', zh: '环自 12 点顺时针：机构 · 高管 · 议员，每段按买入（绿）与卖出（红）的金额分色' },
+    'smart.g_ring':             { en: 'ring: the dollars bought (green) and sold (red), clockwise from 12', zh: '环：买入（绿）与卖出（红）的金额占比，从 12 点顺时针' },
     'smart.g_hint':             { en: 'A thicker line moved more money, and its dots run the way it went: into a stock on a buy, out of it on a sale. Click a stock or a person to see the amounts; drag one to move it; hold ⌘ or Ctrl and scroll to zoom.',
                                   zh: '线越粗，金额越大；光点沿资金方向流动：买入时流进股票，卖出时流出。点击股票或人物查看金额明细；可拖动节点；按住 ⌘ 或 Ctrl 滚动可缩放。' },
     'smart.g_stat':             { en: '{s} stocks · {p} people · {l} links', zh: '{s} 只股票 · {p} 人 · {l} 条关联' },

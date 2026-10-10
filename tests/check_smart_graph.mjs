@@ -165,6 +165,36 @@ console.log('build: amounts');
   t('a person’s dollars add up over their links', node(g, 'p:fund-a').amount === 2e8 + 9e9);
 }
 
+console.log('the ring is dollars, not people');
+{
+  // TSM on 2026-10-09: 13F managers $823M in and $1.55B out, insiders $1.5M
+  // in, one House member $16K in. Thirds per source drew it two-thirds green.
+  const tsm = { t: 'TSM', agree: null, split: true, src: {
+    funds: src('sell', [fund('fund-a', 'Ann', 'reduced', { v: -1.553e9 }), fund('fund-b', 'Bob', 'increased', { v: 8.23e8 })],
+               { buy: 1, sell: 1, bought: 8.23e8, sold: 1.553e9 }),
+    insiders: src('buy', [ins('ins-i-tsm', 'Ida', 'buy')], { buy: 3, bought: 1.5e6, sold: 3761 }),
+    house: src('buy', [mem('house-h', 'Hal', 'buy')], { buy: 1, bought: 16001, sold: 0 }) } };
+  const g = SG.build({ tickers: [tsm], people: [] }, [tsm], {});
+  const n = node(g, 't:TSM');
+  t('the stock node keeps its dollars, and its split flag apart from them',
+    n.bought === 8.23e8 + 1.5e6 + 16001 && n.sold === 1.553e9 + 3761 && n.split === true);
+  const arcs = SG.ringArcs(n);
+  const len = a => a[1] - a[0];
+  const green = arcs.filter(a => a[2] === 'buy').reduce((x, a) => x + len(a), 0);
+  const red = arcs.filter(a => a[2] === 'sell').reduce((x, a) => x + len(a), 0);
+  t('one circle, green then red, from 12 o\u2019clock', arcs.length === 2 && arcs[0][2] === 'buy' && arcs[1][2] === 'sell'
+    && Math.abs(arcs[0][0] + Math.PI / 2) < 1e-9 && Math.abs(green + red - Math.PI * 2) < 1e-9);
+  t('green is the share of dollars bought', Math.abs(green / (Math.PI * 2) - n.bought / (n.bought + n.sold)) < 1e-9,
+    `${(green / (Math.PI * 2) * 100).toFixed(1)}% green`);
+  t('so a stock sold on the money reads mostly red', red > green);
+  const only = SG.ringArcs({ bought: 5, sold: 0 });
+  t('all bought is all green', only.length === 1 && only[0][2] === 'buy' && Math.abs(len(only[0]) - Math.PI * 2) < 1e-9);
+  const none = SG.ringArcs({ bought: 0, sold: 0, arcs: { funds: 'hold', insiders: null, house: 'sell' } });
+  t('no dollars falls back to the sources in thirds', none.length === 3 && none.map(a => a[2]).join() === 'hold,,sell');
+  const off = SG.build({ tickers: [tsm], people: [] }, [tsm], { src: ['house'] });
+  t('a source switched off takes its dollars with it', node(off, 't:TSM').bought === 16001 && node(off, 't:TSM').sold === 0);
+}
+
 console.log('build: a payload from before ids');
 {
   const old = JSON.parse(JSON.stringify(DATA));

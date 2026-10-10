@@ -3205,11 +3205,15 @@ Tests: `tests/test_congress.py` (26), `tests/test_smart_money.py` (25) and
 A canvas over the table, drawn by `static/smart_graph.js` from the same
 payload: beside the panel from 1000px, above it on a phone (grid areas), so a
 tap's answer is under the picture.
-- **What it draws.** A stock is a disc whose ring has three arcs, 13F from 12
-  o'clock, then insiders, then House. Each arc is split green and red by the
-  dollars its source bought and sold (asked 2026-10-09: "drawn on amount
-  instead of persons"); one with no dollars, holds only, keeps its side's
-  colour. Two or more agreeing, by the table's count rule, also glows. A person is a dot coloured by kind. A link is
+- **What it draws.** A stock is a disc whose ring is one circle split by
+  dollars, from 12 o'clock: green for the share bought, red for the share sold
+  (`ringArcs`; asked twice on 2026-10-09: "绿色和红色的圆圈应该是金额 而不是人数").
+  The first try split each source's third by its own dollars, which gave a
+  House member's $16K as much ring as a fund's $2.4B. It never drew either:
+  the node carried two `split` keys, and the table's both-ways flag
+  overwrote the fractions. A stock with no dollars at all (holds only) falls
+  back to the sources' sides in thirds. Two or more agreeing, by the table's
+  count rule, also glows. A person is a dot coloured by kind. A link is
   coloured by what they did, dashed where it sets no side (a hold, a 10b5-1
   plan sale, an offering), and a dot runs along it the way the money went.
 - **What goes in.** The table's own filters, then the stocks with the most
@@ -3262,8 +3266,8 @@ tap's answer is under the picture.
   shrink to their minimum and folded the network to 2px. A reader behind
   trade-agents.com's reading wall is scrolled to the wall's offer instead,
   since the view would lift everything the wall covers.
-- **Tests.** `node tests/check_smart_graph.mjs` (83: the joins, the cut, picks,
-  holds, amounts and the amount ranking, the area rule, old payloads,
+- **Tests.** `node tests/check_smart_graph.mjs` (90: the joins, the cut, picks,
+  holds, amounts and the amount ranking, the dollar ring, the area rule, old payloads,
   determinism, overlaps, labels, the page's wiring, its sortable headers and
   the bigger view); `MoneyMovedTests` in `tests/test_sec13f.py`.
 

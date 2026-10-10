@@ -3,11 +3,9 @@
  * on openbit.trade/people (asked for 2026-10-09).
  *
  * Stocks and the people who moved them, drawn as one graph. A stock is a disc
- * with a ring of three arcs, one per source -- 13F managers at the top, then
- * insiders, then House members, clockwise -- each split green and red by the
- * dollars that source bought and sold, so "two or more agree" reads as two
- * arcs of one colour, and a stock where they do (by count, the table's rule)
- * also glows. A person is a dot in the colour of what they
+ * whose ring is split by dollars: green for the share bought, red for the
+ * share sold (ringArcs). A stock where two or more sources agree, by the
+ * table's count rule, also glows. A person is a dot in the colour of what they
  * are (manager, insider, member). A link is coloured by what that person did
  * to that stock, dashed where it does not set the side (a hold, a 10b5-1 plan
  * sale, a purchase in an offering), and a dot travels along it the way the
@@ -162,20 +160,12 @@
 
     const nodes = [], links = [], index = new Map();
     chosen.forEach(r => {
-      const arcs = {}, split = {};
-      SRC.forEach(s => {
-        const on = src.indexOf(s) >= 0, x = r.src[s];
-        arcs[s] = on ? arcOf(x) : null;
-        // Each third is split green and red by the dollars bought and sold
-        // (asked 2026-10-09: "drawn on amount instead of persons"); a third
-        // with no dollars keeps its side's colour.
-        const b = on && x ? x.bought || 0 : 0, sold = on && x ? x.sold || 0 : 0;
-        split[s] = b + sold > 0 ? b / (b + sold) : null;
-      });
+      const arcs = {};
+      SRC.forEach(s => { arcs[s] = src.indexOf(s) >= 0 ? arcOf(r.src[s]) : null; });
       const agree = agreeOn(r, src);
       index.set('t:' + r.t, nodes.length);
       const amt = amountOn(r, src);
-      nodes.push({ id: 't:' + r.t, type: 'stock', key: r.t, row: r, arcs, split,
+      nodes.push({ id: 't:' + r.t, type: 'stock', key: r.t, row: r, arcs,
                    agree: agree ? agree.side : null, split: !!r.split, moves: peopleOn(r, src), deg: 0,
                    bought: amt.b, sold: amt.s, amount: amt.b + amt.s });
     });
@@ -474,6 +464,27 @@
   // The three arcs, clockwise from the top: 13F, insiders, House.
   const ARC_START = { funds: -Math.PI / 2, insiders: Math.PI / 6, house: Math.PI * 5 / 6 };
   const ARC_GAP = 0.16;
+
+  /**
+   * The arcs a stock's ring is drawn with, each [start, end, colour key] in
+   * radians, clockwise. With dollars on it the ring is one circle split by
+   * them, from 12 o'clock: green for the share bought, red for the share sold,
+   * over the sources switched on (asked twice on 2026-10-09: "the green and red
+   * circle should be the amount, not the people"). Thirds for the three
+   * sources gave a House member's $16K as much ring as a fund's $2.4B. With no
+   * dollars at all (holds only, plan trades with no value) it falls back to
+   * the sources' sides in thirds, and a source with nothing is a faint track.
+   */
+  function ringArcs(n) {
+    const top = -Math.PI / 2, b = n.bought || 0, sold = n.sold || 0, tot = b + sold;
+    if (tot > 0) {
+      const mid = top + Math.PI * 2 * (b / tot), out = [];
+      if (b > 0) out.push([top, mid, 'buy']);
+      if (sold > 0) out.push([mid, top + Math.PI * 2, 'sell']);
+      return out;
+    }
+    return SRC.map(s => [ARC_START[s] + ARC_GAP / 2, ARC_START[s] + Math.PI * 2 / 3 - ARC_GAP / 2, (n.arcs || {})[s] || null]);
+  }
   const MONO = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
   const SANS = 'system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 
@@ -749,18 +760,9 @@
         ctx.fillStyle = P.disc;
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         const lw = Math.max(2.6, r * 0.22);
-        SRC.forEach(s => {
-          const a0 = ARC_START[s] + ARC_GAP / 2, a1 = ARC_START[s] + Math.PI * 2 / 3 - ARC_GAP / 2;
-          const side = n.arcs[s], f = n.split ? n.split[s] : null;
-          ctx.lineWidth = side ? lw : lw * 0.55;
-          if (side && f != null) {
-            // Bought, clockwise from the third's start, then sold.
-            const mid = a0 + (a1 - a0) * f;
-            if (f > 0) { ctx.strokeStyle = P.buy; ctx.beginPath(); ctx.arc(x, y, r - lw / 2, a0, mid); ctx.stroke(); }
-            if (f < 1) { ctx.strokeStyle = P.sell; ctx.beginPath(); ctx.arc(x, y, r - lw / 2, mid, a1); ctx.stroke(); }
-            return;
-          }
-          ctx.strokeStyle = side ? (P[side] || P.none) : P.track;
+        ringArcs(n).forEach(([a0, a1, key]) => {
+          ctx.lineWidth = key ? lw : lw * 0.55;
+          ctx.strokeStyle = key ? (P[key] || P.none) : P.track;
           ctx.beginPath(); ctx.arc(x, y, r - lw / 2, a0, a1); ctx.stroke();
         });
         const label = tickerLabel(n.key);
@@ -985,7 +987,7 @@
     return api;
   }
 
-  const api = { build, focusRows, amountOn, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS, MIN_STOCKS };
+  const api = { build, focusRows, amountOn, ringArcs, layout, createSim, bounds, fit, placeLabels, maxStocks, mount, hasCJK, tickerLabel, rgba, SRC, MAX_STOCKS, MIN_STOCKS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.SmartGraph = api;
 })(typeof window !== 'undefined' ? window : globalThis);
